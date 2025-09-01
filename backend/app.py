@@ -19,7 +19,8 @@ load_dotenv()
 
 # Configure Flask App
 app = Flask(__name__)
-CORS(app)
+frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000")
+CORS(app, resources={r"/api/*": {"origins": frontend_url}})
 
 # --- Ensure your Firebase setup is present ---
 if not firebase_admin._apps:
