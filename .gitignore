@@ -1,0 +1,16 @@
+```.gitignore
+# Python
+/backend/venv/
+/backend/__pycache__/
+/backend/firebase-credentials.json
+
+# Node.js
+/frontend/.next/
+/frontend/node_modules/
+
+# Environment files
+.env
+.env*.local
+.env.local
+.venv*
+/venv*
