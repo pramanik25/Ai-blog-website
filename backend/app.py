@@ -1,4 +1,4 @@
-# backend/app.py
+import time
 import os
 import json
 import re
@@ -55,9 +55,8 @@ client = Groq(
     api_key=os.getenv("GROQ_API_KEY"),
 )
 
-HF_API_URL = "https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-xl-base-1.0"
-HF_API_TOKEN = os.getenv("HUGGINGFACE_API_TOKEN")
-
+STABLE_HORDE_API_KEY = os.getenv("STABLE_HORDE_API_KEY", "0000000000")
+STABLE_HORDE_BASE_URL = "https://stablehorde.net/api/v2"
 
 # --- API ROUTES ---
 @app.route('/api/generate-content', methods=['POST'])
@@ -137,12 +136,9 @@ def generate_content_text_only():
             print(f"---AI TEXT RESPONSE THAT CAUSED FAILURE---\n{response_content}")
         return jsonify({"error": "A critical error occurred during text generation."}), 500
 
+
 @app.route('/api/generate-image', methods=['POST'])
 def generate_image_for_placeholder():
-    """
-    This new, dedicated endpoint handles generating one image at a time.
-    It's called by the frontend after the page has already loaded.
-    """
     data = request.json
     prompt = data.get('prompt')
     article_slug = data.get('slug')
@@ -152,35 +148,78 @@ def generate_image_for_placeholder():
         return jsonify({"error": "Prompt, slug, and index are required"}), 400
 
     try:
-        # --- Generate Image with Hugging Face ---
-        print(f"Generating image for slug '{article_slug}' with prompt: '{prompt}'")
-        headers = {"Authorization": f"Bearer {HF_API_TOKEN}"}
-        payload = {"inputs": prompt}
-        response = requests.post(HF_API_URL, headers=headers, json=payload, timeout=60)
+        print(f"Requesting image from Stable Horde for prompt: '{prompt}'")
+        
+        # --- Stage 1: Submit the Generation Request ---
+        payload = {
+            "prompt": f"{prompt}, (masterpiece), (best quality), (ultra-detailed), cinematic, sharp focus, professional photography",
+            "params": {
+                "sampler_name": "k_dpmpp_2s_a",
+                "cfg_scale": 7,
+                "width": 1024,
+                "height": 576,
+                "steps": 25,
+                "n": 1
+            },
+            "models": ["stable_diffusion_xl"] # Use the best available model
+        }
+        headers = {
+            "apikey": STABLE_HORDE_API_KEY, 
+            "Client-Agent": f"AI-Blogger:1.0:{frontend_url}" 
+        }
+
+        #headers = {"apikey": STABLE_HORDE_API_KEY, "Client-Agent": "AI-Blogger:1.0:https://aibloger.vercel.app"}
+
+        # Make the initial request to start the generation
+        response = requests.post(f"{STABLE_HORDE_BASE_URL}/generate/async", json=payload, headers=headers)
         response.raise_for_status()
-        image_bytes = response.content
         
-        if not image_bytes:
-            raise ValueError("Hugging Face API returned no image data.")
+        initial_data = response.json()
+        generation_id = initial_data.get('id')
+        if not generation_id:
+            raise ValueError("Stable Horde did not return a generation ID.")
+
+        print(f"Request accepted. Generation ID: {generation_id}. Waiting for completion...")
+
+        # --- Stage 2: Poll for the Result ---
+        image_url = None
+        start_time = time.time()
+        while time.time() - start_time < 90: # 90 second timeout
+            # Check the status of our generation job
+            check_response = requests.get(f"{STABLE_HORDE_BASE_URL}/generate/status/{generation_id}")
+            if check_response.status_code == 200:
+                status_data = check_response.json()
+                if status_data.get('done'):
+                    print("Generation complete!")
+                    # The image is hosted temporarily by Stable Horde
+                    temp_image_url = status_data['generations'][0]['img']
+                    
+                    # --- Stage 3: Download from Temp URL and Upload to Firebase ---
+                    image_response = requests.get(temp_image_url, stream=True)
+                    image_response.raise_for_status()
+                    image_bytes = image_response.content
+
+                    bucket = storage.bucket()
+                    destination_blob_name = f"images/{article_slug}-{placeholder_index + 1}.png"
+                    blob = bucket.blob(destination_blob_name)
+                    blob.upload_from_string(image_bytes, content_type='image/png')
+                    blob.make_public()
+                    image_url = blob.public_url # Our final, permanent URL
+                    print(f"Image uploaded to Firebase: {image_url}")
+                    break # Exit the polling loop
+
+            time.sleep(5) # Wait 5 seconds before checking again
+        
+        if not image_url:
+            raise TimeoutError("Stable Horde generation timed out after 90 seconds.")
             
-        # --- Upload to Firebase ---
-        bucket = storage.bucket()
-        destination_blob_name = f"images/{article_slug}-{placeholder_index + 1}.png"
-        blob = bucket.blob(destination_blob_name)
-        blob.upload_from_string(image_bytes, content_type='image/png')
-        blob.make_public()
-        image_url = blob.public_url
-        print(f"Image uploaded successfully: {image_url}")
-        
-        # --- Update the Article in the Database ---
-        # Find the article and replace the placeholder with the final URL
+        # --- Stage 4: Update the Article in the Database ---
         article = Article.query.filter_by(slug=article_slug).first()
         if article:
             placeholder_full_tag = f"[IMAGE: {prompt}]"
             markdown_image_tag = f"![{prompt}]({image_url})"
             
-            # Update hero image if it's the first one
-            if article.image_url is None:
+            if article.image_url is None: # Set the hero image if it's the first one
                 article.image_url = image_url
             
             article.content = article.content.replace(placeholder_full_tag, markdown_image_tag, 1)
@@ -192,7 +231,6 @@ def generate_image_for_placeholder():
         print(f"A critical error occurred in generate_image_for_placeholder: {e}")
         return jsonify({"error": "Failed to generate image."}), 500
 
-    
 # The get_article route remains exactly the same
 @app.route('/api/get-article/<slug>', methods=['GET'])
 def get_article(slug):
