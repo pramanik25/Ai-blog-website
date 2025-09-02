@@ -19,8 +19,16 @@ load_dotenv()
 
 # Configure Flask App
 app = Flask(__name__)
-frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000")
-CORS(app, resources={r"/api/*": {"origins": frontend_url}})
+
+frontend_url = os.getenv("FRONTEND_URL") 
+allowed_origins = ["http://localhost:3000"]
+
+if frontend_url:
+    allowed_origins.append(frontend_url)
+
+# Apply the CORS configuration.
+# The 'origins' parameter directly accepts our list of allowed domains.
+CORS(app, origins=allowed_origins, supports_credentials=True)
 
 # --- Ensure your Firebase setup is present ---
 if not firebase_admin._apps:
