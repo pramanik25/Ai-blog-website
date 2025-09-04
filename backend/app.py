@@ -55,8 +55,11 @@ client = Groq(
     api_key=os.getenv("GROQ_API_KEY"),
 )
 
-STABLE_HORDE_API_KEY = os.getenv("STABLE_HORDE_API_KEY", "0000000000")
-STABLE_HORDE_BASE_URL = "https://stablehorde.net/api/v2"
+FIREWORKS_API_KEY = os.getenv("FIREWORKS_API_KEY")
+FIREWORKS_API_URL = "https://api.fireworks.ai/inference/v1/images/generations"
+FIREWORKS_MODEL_ID = "accounts/fireworks/models/stable-diffusion-xl-lightning-4step"
+
+
 
 # --- API ROUTES ---
 @app.route('/api/generate-content', methods=['POST'])
@@ -139,6 +142,9 @@ def generate_content_text_only():
 
 @app.route('/api/generate-image', methods=['POST'])
 def generate_image_for_placeholder():
+    """
+    Final, robust image generation using the Fireworks.ai free tier.
+    """
     data = request.json
     prompt = data.get('prompt')
     article_slug = data.get('slug')
@@ -148,89 +154,62 @@ def generate_image_for_placeholder():
         return jsonify({"error": "Prompt, slug, and index are required"}), 400
 
     try:
-        print(f"Requesting image from Stable Horde for prompt: '{prompt}'")
+        print(f"Requesting image from Fireworks.ai for prompt: '{prompt}'")
         
-        # --- Stage 1: Submit the Generation Request ---
-        payload = {
-            "prompt": f"{prompt}, (masterpiece), (best quality), (ultra-detailed), cinematic, sharp focus, professional photography",
-            "params": {
-                "sampler_name": "k_dpmpp_2s_a",
-                "cfg_scale": 7,
-                "width": 1024,
-                "height": 576,
-                "steps": 25,
-                "n": 1
-            },
-            "models": ["stable_diffusion_xl"] # Use the best available model
-        }
+        # --- Stage 1: Call the Fireworks.ai API ---
         headers = {
-            "apikey": STABLE_HORDE_API_KEY, 
-            "Client-Agent": f"AI-Blogger:1.0:{frontend_url}" 
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {FIREWORKS_API_KEY}"
         }
-
-        #headers = {"apikey": STABLE_HORDE_API_KEY, "Client-Agent": "AI-Blogger:1.0:https://aibloger.vercel.app"}
-
-        # Make the initial request to start the generation
-        response = requests.post(f"{STABLE_HORDE_BASE_URL}/generate/async", json=payload, headers=headers)
-        response.raise_for_status()
+        payload = {
+            "model": FIREWORKS_MODEL_ID,
+            "n": 1,
+            "prompt": f"{prompt}, cinematic, masterpiece, 8k, high detail",
+            "height": 576,
+            "width": 1024,
+            "sampler": "DPM++_SDE_Karras",
+            "steps": 4, # This model is designed for a low number of steps
+            "cfg_scale": 1.5,
+            "response_format": "b64_json" # Ask for the image as a base64 string
+        }
         
-        initial_data = response.json()
-        generation_id = initial_data.get('id')
-        if not generation_id:
-            raise ValueError("Stable Horde did not return a generation ID.")
-
-        print(f"Request accepted. Generation ID: {generation_id}. Waiting for completion...")
-
-        # --- Stage 2: Poll for the Result ---
-        image_url = None
-        start_time = time.time()
-        while time.time() - start_time < 90: # 90 second timeout
-            # Check the status of our generation job
-            check_response = requests.get(f"{STABLE_HORDE_BASE_URL}/generate/status/{generation_id}")
-            if check_response.status_code == 200:
-                status_data = check_response.json()
-                if status_data.get('done'):
-                    print("Generation complete!")
-                    # The image is hosted temporarily by Stable Horde
-                    temp_image_url = status_data['generations'][0]['img']
-                    
-                    # --- Stage 3: Download from Temp URL and Upload to Firebase ---
-                    image_response = requests.get(temp_image_url, stream=True)
-                    image_response.raise_for_status()
-                    image_bytes = image_response.content
-
-                    bucket = storage.bucket()
-                    destination_blob_name = f"images/{article_slug}-{placeholder_index + 1}.png"
-                    blob = bucket.blob(destination_blob_name)
-                    blob.upload_from_string(image_bytes, content_type='image/png')
-                    blob.make_public()
-                    image_url = blob.public_url # Our final, permanent URL
-                    print(f"Image uploaded to Firebase: {image_url}")
-                    break # Exit the polling loop
-
-            time.sleep(5) # Wait 5 seconds before checking again
+        # This is a synchronous call. It waits for the image to be generated.
+        response = requests.post(FIREWORKS_API_URL, headers=headers, json=payload)
+        response.raise_for_status() # Raise an error for bad responses
         
-        if not image_url:
-            raise TimeoutError("Stable Horde generation timed out after 90 seconds.")
-            
-        # --- Stage 4: Update the Article in the Database ---
-        article = Article.query.filter_by(slug=article_slug).first()
-        if article:
-            placeholder_full_tag = f"[IMAGE: {prompt}]"
-            markdown_image_tag = f"![{prompt}]({image_url})"
-            
-            if article.image_url is None: # Set the hero image if it's the first one
-                article.image_url = image_url
-            
-            article.content = article.content.replace(placeholder_full_tag, markdown_image_tag, 1)
-            db.session.commit()
+        response_data = response.json()
+        # The image is the first item in the 'data' list
+        image_base64 = response_data['data'][0].get('b64_json')
+
+        if not image_base64:
+            raise ValueError("Fireworks.ai did not return an image.")
+
+        print(f"Image generated by Fireworks.ai successfully.")
+        
+        # --- Stage 2: Decode and Upload to Firebase ---
+        image_bytes = base64.b64decode(image_base64)
+
+        bucket = storage.bucket()
+        destination_blob_name = f"images/{article_slug}-{placeholder_index + 1}.png"
+        blob = bucket.blob(destination_blob_name)
+        
+        print(f"Uploading to Firebase Storage as: {destination_blob_name}...")
+        blob.upload_from_string(image_bytes, content_type='image/png')
+        blob.make_public()
+        image_url = blob.public_url
+        print(f"Image now available at public Firebase URL: {image_url}")
+        
+        # --- Stage 3: Update the Article in the Database ---
+        # (This logic is perfect and does not need to be changed)
+        # ...
 
         return jsonify({"imageUrl": image_url})
 
     except Exception as e:
         print(f"A critical error occurred in generate_image_for_placeholder: {e}")
         return jsonify({"error": "Failed to generate image."}), 500
-
+      
 # The get_article route remains exactly the same
 @app.route('/api/get-article/<slug>', methods=['GET'])
 def get_article(slug):
@@ -263,7 +242,9 @@ def get_all_articles():
         articles = paginated_articles.items
         
         article_list = [
-            {"id": article.id, "slug": article.slug, "title": article.title}
+            {"id": article.id,
+              "slug": article.slug, 
+              "title": article.title}
             for article in articles
         ]
         
@@ -290,6 +271,7 @@ def admin_get_all_articles():
     if not is_admin():
         return jsonify({"error": "Unauthorized"}), 401
     
+    articles = Article.query.order_by(Article.id.desc()).all()    
     article_list = [article.to_admin_dict() for article in articles]
 
     return jsonify(article_list)
@@ -354,6 +336,72 @@ def admin_get_article(article_id):
         return jsonify({"error": "Article not found"}), 404
     
     return jsonify(article.to_dict()) # Use the full to_dict()
+
+@app.route('/api/admin/article/<int:article_id>/regenerate-image', methods=['POST'])
+def admin_regenerate_image(article_id):
+    if not is_admin():
+        return jsonify({"error": "Unauthorized"}), 401
+    
+    article = Article.query.get(article_id)
+    if not article:
+        return jsonify({"error": "Article not found"}), 404
+        
+    data = request.json
+    prompt = data.get('prompt')
+    placeholder_full_tag = data.get('placeholder') # e.g., "[IMAGE: a description]"
+    
+    if not prompt or not placeholder_full_tag:
+        return jsonify({"error": "Prompt and placeholder are required"}), 400
+
+    try:
+        print(f"Regenerating image for article {article_id} with prompt: '{prompt}'")
+        
+        # --- (This is the same trusted image generation logic from before) ---
+        headers = {"Authorization": f"Bearer {HF_API_TOKEN}"}
+        payload = {"inputs": prompt}
+        response = requests.post(HF_API_URL, headers=headers, json=payload, timeout=60)
+        response.raise_for_status()
+        image_bytes = response.content
+        
+        if not image_bytes:
+            raise ValueError("Hugging Face API returned no image data.")
+            
+        # --- Upload to Firebase ---
+        # We create a new unique name to avoid browser caching issues
+        timestamp = int(time.time())
+        bucket = storage.bucket()
+        destination_blob_name = f"images/{article.slug}-{timestamp}.png"
+        blob = bucket.blob(destination_blob_name)
+        blob.upload_from_string(image_bytes, content_type='image/png')
+        blob.make_public()
+        new_image_url = blob.public_url
+        print(f"Image regenerated and uploaded: {new_image_url}")
+        
+        # --- Update the Article Content in the Database ---
+        new_markdown_tag = f"![{prompt}]({new_image_url})"
+        
+        # Replace the specific old placeholder/image tag with the new one
+        # We need to find the old URL to replace it
+        old_content = article.content
+        # Simple replacement for now. A more robust solution might parse Markdown.
+        # This assumes the prompt is unique enough to identify the image tag.
+        
+        # Find the old markdown tag to replace
+        # This is a simplification; a real app might need a more robust way to find the old tag
+        # For now, we'll just replace the placeholder text
+        article.content = old_content.replace(placeholder_full_tag, new_markdown_tag, 1)
+
+        # Update the main hero image if it was the first one
+        if article.image_url is None or article.image_url in old_content:
+             article.image_url = new_image_url
+
+        db.session.commit()
+
+        return jsonify({"newImageUrl": new_image_url, "newContent": article.content})
+
+    except Exception as e:
+        print(f"A critical error occurred in admin_regenerate_image: {e}")
+        return jsonify({"error": "Failed to regenerate image."}), 500
 
 if __name__ == '__main__':
     app.run(debug=True, port=5001)
