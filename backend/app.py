@@ -125,9 +125,9 @@ def generate_content_text_only():
             title=data['title'],
             meta_description=data['meta_description'],
             content=data['content'],
-            is_published=True
+            is_published=True,
             author_name=data.get('authorName'), 
-            author_bio=data.get('authorBio') 
+            author_bio=data.get('authorBio'),
         )
         db.session.add(new_article)
         db.session.commit()
