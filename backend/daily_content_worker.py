@@ -54,6 +54,28 @@ def get_ai_generated_topics_for_region(country_name):
         )
         response_content = chat_completion.choices[0].message.content
         topics_data = json.loads(response_content)
+
+         # --- THIS IS THE NEW, SMARTER PARSING LOGIC ---
+        raw_topics = topics_data if isinstance(topics_data, list) else topics_data.get('topics', [])
+        
+        # Flatten the list in case the AI returns a list within a list
+        topics = []
+        for item in raw_topics:
+            if isinstance(item, list):
+                topics.extend(item)
+            else:
+                topics.append(item)
+
+        # Clean up any non-string items (like the '***')
+        cleaned_topics = [str(topic) for topic in topics if isinstance(topic, str)]
+        
+        if cleaned_topics:
+            print(f"  - Found and cleaned topics: {cleaned_topics[:TOPICS_PER_REGION]}")
+            return cleaned_topics[:TOPICS_PER_REGION]
+        else:
+            print("  - AI did not return a valid list of topics.")
+            return []
+        # --- END OF NEW LOGIC ---
         
         # Handle both list and dict responses from the AI
         topics = topics_data if isinstance(topics_data, list) else topics_data.get('topics', [])
