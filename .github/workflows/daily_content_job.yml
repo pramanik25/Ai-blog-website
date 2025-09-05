@@ -37,6 +37,26 @@ jobs:
     - name: Create Firebase Credentials File
       run: echo "${{ secrets.FIREBASE_CREDENTIALS_JSON }}" > backend/firebase-credentials.json
 
+      
+    - name: Create Firebase Credentials File
+      run: echo "${{ secrets.FIREBASE_CREDENTIALS_JSON }}" > backend/firebase-credentials.json
+
+    # --- NEW DEBUGGING STEP ---
+    # This step will print the environment variables to the log.
+    # We will check if the GROQ_API_KEY is present and looks correct.
+    - name: Debug Environment Variables
+      run: |
+        echo "GENERATION_API_URL is: ${{ env.GENERATION_API_URL }}"
+        echo "GROQ_API_KEY is present: ${{ env.GROQ_API_KEY != '' }}"
+        echo "First 5 chars of GROQ_API_KEY: ${{ env.GROQ_API_KEY_START }}"
+      env:
+        # We need to map the secrets to env variables for this step too
+        GENERATION_API_URL: ${{ secrets.GENERATION_API_URL }}
+        GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+        # We create a new temporary variable with the start of the key for safe logging
+        GROQ_API_KEY_START: ${{ secrets.GROQ_API_KEY_START }}
+    # --- END OF DEBUGGING STEP ---
+
     # Step 5: Run your daily content worker script.
     # It has access to all the secrets we added as environment variables.
     - name: Run Daily Content Worker
