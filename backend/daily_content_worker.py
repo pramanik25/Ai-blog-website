@@ -48,7 +48,7 @@ def get_ai_generated_topics_for_region(country_name):
         """
         chat_completion = groq_client.chat.completions.create(
             messages=[{"role": "user", "content": prompt}],
-            model="llama3-8b-8192", # Use the correct, active model name
+            model="llama-3.1-8b-instant", # Use the correct, active model name
             temperature=1.2,
             response_format={"type": "json_object"},
         )
