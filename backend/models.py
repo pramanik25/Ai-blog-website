@@ -12,6 +12,8 @@ class Article(db.Model):
     content = db.Column(db.Text, nullable=False)
     image_url = db.Column(db.String(500), nullable=True)
     is_published = db.Column(db.Boolean, default=True, nullable=False)
+    author_name = db.Column(db.String(255), nullable=True)
+    author_bio = db.Column(db.Text, nullable=True)
 
     # Link translations together
     original_article_id = db.Column(db.Integer, db.ForeignKey('article.id'), nullable=True)
@@ -27,6 +29,8 @@ class Article(db.Model):
             'content': self.content,
             'image_url': self.image_url,
             'is_published': self.is_published,
+            'authorName': self.author_name,
+            'authorBio': self.author_bio,
             'translations': [{'lang': t.lang, 'slug': t.slug} for t in self.translations]
         }
 

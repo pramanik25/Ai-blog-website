@@ -43,7 +43,8 @@ Write a high-quality, in-depth, and engaging blog post of at least 800 words on 
 
 def get_combined_prompt(query):
     return f"""
-You are an expert content generation system. Your task is to create a complete, engaging blog post in a structured JSON format.
+You are an world-class SEO expert and copywriter. Your task is to generate perfectly optimized metadata for a blog post based on a user's search query.You are an expert content generation system. Your task is to create a complete, engaging blog post in a structured JSON format. Assume a persona for an expert author on the topic.
+
 
 **User Query:** "{query}"
 
@@ -55,12 +56,15 @@ The JSON object must contain these keys:
 2.  **"meta_description"**: A compelling meta description.
 3.  **"slug"**: A URL-friendly slug based on the title.
 4.  **"content"**: The full blog post content as a string, formatted with Markdown.
+5.  **"authorName"**: A plausible and professional-sounding name for an author who is an expert on this topic.
+6.  **"authorBio"**: A short, one-sentence biography (around 20-30 words) for this author persona, highlighting their expertise related to the article's topic.
 
 **CRITICAL INSTRUCTION FOR IMAGES:**
 Throughout the article, where a visual would be most effective to illustrate a point, you MUST insert a special placeholder.
 - The placeholder format is: `[IMAGE: A detailed, photorealistic prompt for an image generation model]`
 - **Insert between 2 and 4 of these image placeholders** at natural breaks in the article (e.g., after a section heading).
 - The description inside the placeholder should be rich and descriptive, as it will be used to generate the image. For example: `[IMAGE: A wide cinematic shot of the Grand Canyon at sunrise, with golden light hitting the canyon walls]`
+
 
 **RULES FOR HANDLING QUERIES:**
 - If the query is vague, choose a popular sub-topic.
