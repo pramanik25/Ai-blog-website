@@ -2,107 +2,138 @@
 import os
 import requests
 import time
-from pytrends.request import TrendReq
+import json
 from slugify import slugify
 import random
+from groq import Groq
 
 # --- CONFIGURATION ---
 
 # Define our target regions and the primary language for each.
-# Pytrends country codes: 'IN' (India), 'US' (United States), 'FR' (France), 'DE' (Germany), 'BR' (Brazil for Portuguese)
 TARGET_REGIONS = {
-    'india':      {'code': 'IN', 'lang': 'hi'}, # Hindi
-    'united_states': {'code': 'US', 'lang': 'en'}, # English
-    'france':     {'code': 'FR', 'lang': 'fr'}, # French
-    'germany':    {'code': 'DE', 'lang': 'de'}, # German
-    'brazil':     {'code': 'BR', 'lang': 'pt'}, # Portuguese
+    'India':      {'lang': 'hi'}, # Hindi
+    'United States': {'lang': 'en'}, # English
+    'France':     {'lang': 'fr'}, # French
+    'Germany':    {'lang': 'de'}, # German
+    'Brazil':     {'lang': 'pt'}, # Portuguese
 }
 
 # The list of all languages we want articles to be available in.
-ALL_TARGET_LANGUAGES = ['en', 'hi', 'fr', 'de', 'pt', 'es'] # Added Spanish as a translation target
+ALL_TARGET_LANGUAGES = ['en', 'hi', 'fr', 'de', 'pt', 'es']
 
 # How many top trending articles to generate per country
-ARTICLES_PER_REGION = 2 # Let's do 2 from each country for a total of 10 articles
+TOPICS_PER_REGION = 3
 
+# The public URL of your live Render backend's generation endpoint
 GENERATION_API_URL = os.getenv("GENERATION_API_URL")
 LIBRETRANSLATE_API_URL = "https://libretranslate.de/translate"
 
+# --- SETUP ---
+groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+
 # --- FUNCTIONS ---
 
-def get_trending_keywords(country_name, country_code):
-    """Fetches the top trending keywords for a specific country."""
-    print(f"Fetching trending keywords from Google Trends for: {country_name.upper()}...")
+def get_ai_generated_topics_for_region(country_name):
+    """Asks the Groq AI to act as a local SEO expert for a specific country."""
+    print(f"Generating SEO-friendly topics for: {country_name.upper()}...")
     try:
-        pytrends = TrendReq(hl='en-US', tz=360)
-        trending_df = pytrends.trending_searches(pn=country_name)
-        keywords = trending_df[0].tolist()[:ARTICLES_PER_REGION]
-        print(f"  - Found keywords: {keywords}")
-        return keywords
+        prompt = f"""
+        You are an expert SEO strategist and content planner specializing in the country of {country_name}.
+        Generate a list of the top {TOPICS_PER_REGION} interesting and highly searchable blog post topics that are trending in {country_name} right now.
+        The topics should be diverse and relevant to the local culture and interests.
+        Focus on creating "long-tail" keywords that a user in {country_name} is likely to type into a search engine.
+
+        You MUST respond with ONLY a valid JSON array of {TOPICS_PER_REGION} strings and nothing else.
+        Example format: ["Topic 1", "Topic 2", "Topic 3"]
+        """
+        chat_completion = groq_client.chat.completions.create(
+            messages=[{"role": "user", "content": prompt}],
+            model="llama3-8b-8192", # Use the correct, active model name
+            temperature=1.2,
+            response_format={"type": "json_object"},
+        )
+        response_content = chat_completion.choices[0].message.content
+        topics_data = json.loads(response_content)
+        
+        # Handle both list and dict responses from the AI
+        topics = topics_data if isinstance(topics_data, list) else topics_data.get('topics', [])
+        
+        if topics:
+            print(f"  - Found topics: {topics}")
+            return topics
+        else:
+            print("  - AI did not return a valid list of topics.")
+            return []
     except Exception as e:
-        print(f"  - Could not fetch trends for {country_name}. Error: {e}")
+        print(f"  - AI topic generation failed: {e}")
         return []
 
 def generate_initial_article(keyword, language_code):
-    """Calls our API. Crucially, we now tell it what language to write in."""
-    print(f"Generating article for keyword: '{keyword}' in language '{language_code}'...")
+    """Calls our own API to generate the base article in a specific language."""
+    print(f"  - Generating article for: '{keyword}' in language '{language_code}'...")
     try:
-        # We add the language to the query to guide the AI
         query_with_lang = f"{keyword} (write in {language_code})"
         response = requests.post(GENERATION_API_URL, json={'query': query_with_lang}, timeout=300)
         response.raise_for_status()
-        print("  - Article generated successfully.")
+        print("    - Article generated successfully.")
         return response.json()
     except requests.exceptions.RequestException as e:
-        print(f"  - Error generating article: {e}")
+        print(f"    - Error generating article: {e}")
         return None
 
 def translate_text(text, target_language, source_language):
-    """Translates text using LibreTranslate."""
+    """Translates text using LibreTranslate with a polite delay."""
     if not text or source_language == target_language:
         return text
     
-    # Add a polite delay
-    time.sleep(1 + random.random()) # Sleep 1-2 seconds
+    time.sleep(1 + random.random()) # Polite 1-2 second delay
     
-    print(f"    - Translating from '{source_language}' to '{target_language}'...")
+    print(f"      - Translating from '{source_language}' to '{target_language}'...")
     payload = {'q': text, 'source': source_language, 'target': target_language, 'format': 'text'}
     
     try:
         response = requests.post(LIBRETRANSLATE_API_URL, json=payload, timeout=60)
         response.raise_for_status()
         return response.json().get('translatedText', text)
-    except requests.exceptions.RequestException as e:
-        print(f"    - Translation API error: {e}. Returning original text.")
-        return text
+    except requests.exceptions.RequestException:
+        return text # Return original on failure
 
 def run_daily_job():
     """The main function to orchestrate the multi-region, multi-lingual process."""
-    print("--- Starting Daily Multi-Region Content Generation Job ---")
+    print("--- Starting Daily Multi-Region AI-Topic Content Job ---")
     
-    # Iterate through each of our target countries
     for country_name, region_data in TARGET_REGIONS.items():
-        country_code = region_data['code']
         primary_lang = region_data['lang']
+        print(f"\n--- Processing Region: {country_name.upper()} ---")
 
-        # 1. Get trending keywords for the specific country
-        keywords = get_trending_keywords(country_name, country_code)
+        # 1. Get AI-generated topics for the specific country
+        keywords = get_ai_generated_topics_for_region(country_name)
         
         for keyword in keywords:
+            # --- POLITENESS TIMER ---
+            # Wait 20 seconds before generating the next article
+            print("\nWaiting 20 seconds before next generation...")
+            time.sleep(20)
+
             # 2. Generate the base article in the country's primary language
             initial_article = generate_initial_article(keyword, primary_lang)
             
             if not initial_article:
-                continue # Skip if generation failed
+                continue
 
-            print(f"--- Processing translations for article: '{initial_article['title']}' ---")
+            print(f"    --- Processing translations for article: '{initial_article['title']}' ---")
             
-            # This is where you would save the initial article to your database.
             # --- DATABASE SAVING LOGIC FOR INITIAL ARTICLE ---
+            # You would implement your database saving logic here, e.g.:
+            # from app import app, db, Article
+            # with app.app_context():
+            #   original_article = Article.query.get(initial_article['id'])
+            #   ...
 
             # 3. Translate the initial article into all other target languages
             for lang_code in ALL_TARGET_LANGUAGES:
                 if lang_code == primary_lang:
-                    continue # Don't re-translate to the original language
+                    continue
 
                 try:
                     translated_title = translate_text(initial_article['title'], lang_code, primary_lang)
@@ -110,29 +141,16 @@ def run_daily_job():
                     translated_content = translate_text(initial_article['content'], lang_code, primary_lang)
                     translated_slug = slugify(translated_title)
 
-                    print(f"  - Successfully prepared translation for '{lang_code}'.")
+                    print(f"    - Successfully prepared translation for '{lang_code}'.")
                     
                     # --- DATABASE SAVING LOGIC FOR TRANSLATION ---
-                    # from app import app, db, Article
-                    # with app.app_context():
-                    #   original_article_db = Article.query.get(initial_article['id'])
-                    #   new_translation = Article(
-                    #     slug=translated_slug,
-                    #     lang=lang_code,
-                    #     title=translated_title,
-                    #     ...
-                    #     original_article_id=original_article_db.id
-                    #   )
-                    #   db.session.add(new_translation)
-                    #   db.session.commit()
-                    # -------------------------------------------
+                    # ...
 
                 except Exception as e:
-                    print(f"An unexpected error occurred while translating to '{lang_code}': {e}")
+                    print(f"    - An unexpected error occurred while translating to '{lang_code}': {e}")
 
-    print("--- Daily Content Generation Job Finished ---")
+    print("\n--- Daily Content Generation Job Finished ---")
 
 
 if __name__ == '__main__':
     run_daily_job()
-    
