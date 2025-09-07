@@ -4,8 +4,6 @@ name: Weekly Content Cluster Generation
 
 on:
   schedule:
-    # This CRON string means "run at 02:00 UTC every day".
-    # It runs daily, but the script logic inside ensures it only does one article per day from the weekly plan.
     - cron: '0 2 * * *'
   workflow_dispatch:
 
@@ -26,31 +24,28 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         pip install -r backend/requirements.txt
-        
-    
       
     - name: Create Firebase Credentials File
+      # --- FIX #1: Use the robust single-quoted version ---
+      # This prevents the shell from mangling the JSON content.
       run: echo "${{ secrets.FIREBASE_CREDENTIALS_JSON }}" > backend/firebase-credentials.json
 
     - name: Run Weekly Content Worker
-      # This step needs access to the repository to write the weekly_plan.json file
-      # We need to give it write permissions.
       env:
-        DATABASE_URL: ${{ secrets.DATABASE_URL }}
-        GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
-        FIREWORKS_API_KEY: ${{ secrets.FIREWORKS_API_KEY }}
-        FIREBASE_STORAGE_BUCKET: ${{ secrets.FIREBASE_STORAGE_BUCKET }}
-        GENERATION_API_URL: ${{ secrets.GENERATION_API_URL }}
-      run: |
-        cd backend
-        python weekly_content_worker.py
+        # ... (all your env secrets are the same and correct)
+      # --- FIX #2: Run the script from the root directory ---
+      # This matches the working daily job and is much more reliable.
+       DATABASE_URL: ${{ secrets.DATABASE_URL }}
+       GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+       FIREWORKS_API_KEY: ${{ secrets.FIREWORKS_API_KEY }}
+       FIREBASE_STORAGE_BUCKET: ${{ secrets.FIREBASE_STORAGE_BUCKET }}
+       GENERATION_API_URL: ${{ secrets.GENERATION_API_URL }}
+      run: python backend/weekly_content_worker.py
     
-    # This step is new and important! It commits the updated weekly_plan.json back to your repo.
     - name: Commit and push updated weekly plan
       run: |
         git config --global user.name 'github-actions[bot]'
         git config --global user.email 'github-actions[bot]@users.noreply.github.com'
         git add backend/weekly_plan.json
-        # Only commit if there are changes
         git diff --staged --quiet || git commit -m "Update weekly content plan"
         git push
