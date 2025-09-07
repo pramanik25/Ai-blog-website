@@ -13,6 +13,7 @@ import firebase_admin
 from firebase_admin import credentials, storage
 from models import db, Article, Category 
 import requests
+import random
 import base64
 from slugify import slugify
 
@@ -58,9 +59,34 @@ client = Groq(
 )
 
 FIREWORKS_API_KEY = os.getenv("FIREWORKS_API_KEY")
-FIREWORKS_API_URL = "https://api.fireworks.ai/inference/v1/images/generations"
-FIREWORKS_MODEL_ID = "accounts/fireworks/models/stable-diffusion-xl-lightning-4step"
+FIREWORKS_API_URL = "https://api.fireworks.ai/inference/v1/workflows/accounts/fireworks/models/flux-1-schnell-fp8/text_to_image"
+FIREWORKS_MODEL_ID = "stable-diffusion-xl-lightning-4step"
 
+def get_random_fallback_image():
+    """
+    Fetches the list of all images from Firebase Storage
+    and returns the public URL of a random one.
+    """
+    try:
+        print("--- Initiating fallback: fetching existing images from Firebase Storage ---")
+        bucket = storage.bucket()
+        # List all blobs in the 'images/' directory
+        blobs = bucket.list_blobs(prefix='images/')
+        
+        # Collect all public URLs into a list, skipping the folder itself
+        image_urls = [blob.public_url for blob in blobs if blob.name != 'images/']
+        
+        if not image_urls:
+            print("--- Fallback failed: No existing images found in Firebase Storage. ---")
+            return None
+
+        # Select one URL at random
+        random_url = random.choice(image_urls)
+        print(f"--- Fallback successful. Selected random image: {random_url} ---")
+        return random_url
+    except Exception as e:
+        print(f"--- Fallback failed with an error: {e} ---")
+        return None
 
 
 # --- API ROUTES ---
@@ -158,9 +184,39 @@ def generate_content_text_only():
             print(f"---AI TEXT RESPONSE THAT CAUSED FAILURE---\n{response_content}")
         return jsonify({"error": "A critical error occurred."}), 500
     
+    
+    
+def get_random_fallback_image():
+    """
+    Fetches the list of all images from Firebase Storage
+    and returns the public URL of a random one.
+    """
+    try:
+        print("--- Initiating fallback: fetching existing images from Firebase Storage ---")
+        bucket = storage.bucket()
+        # List all blobs in the 'images/' directory
+        blobs = bucket.list_blobs(prefix='images/')
+        
+        # Collect all public URLs into a list, skipping the folder itself
+        image_urls = [blob.public_url for blob in blobs if blob.name != 'images/']
+        
+        if not image_urls:
+            print("--- Fallback failed: No existing images found in Firebase Storage. ---")
+            return None
+
+        # Select one URL at random
+        random_url = random.choice(image_urls)
+        print(f"--- Fallback successful. Selected random image: {random_url} ---")
+        return random_url
+    except Exception as e:
+        print(f"--- Fallback failed with an error: {e} ---")
+        return None
+
 @app.route('/api/generate-image', methods=['POST'])
 def generate_image_for_placeholder():
-    """Final, robust image generation using the Fireworks.ai free tier."""
+    """
+    Final, robust image generation with a Firebase Storage fallback.
+    """
     data = request.json
     prompt = data.get('prompt')
     article_slug = data.get('slug')
@@ -169,33 +225,29 @@ def generate_image_for_placeholder():
     if not all([prompt, article_slug, placeholder_index is not None]):
         return jsonify({"error": "Prompt, slug, and index are required"}), 400
 
+    image_url = None
     try:
+        # This is your primary image generation logic (e.g., with Fireworks.ai)
+        # We will wrap it in a try...except block.
         print(f"Requesting image from Fireworks.ai for prompt: '{prompt}'")
         
         headers = {
-            "Accept": "application/json",
+            "Accept": "image/png",
             "Content-Type": "application/json",
             "Authorization": f"Bearer {FIREWORKS_API_KEY}"
         }
-        payload = {
-            "model": FIREWORKS_MODEL_ID, "n": 1, "prompt": f"{prompt}, cinematic, masterpiece, 8k",
-            "height": 576, "width": 1024, "sampler": "DPM++_SDE_Karras", "steps": 4,
-            "cfg_scale": 1.5, "response_format": "b64_json"
-        }
+        payload = {"prompt": f"{prompt}, cinematic, masterpiece, 8k"}
         
-        response = requests.post(FIREWORKS_API_URL, headers=headers, json=payload, timeout=60)
+        response = requests.post(FIREWORKS_API_URL, headers=headers, json=payload, timeout=90)
         response.raise_for_status()
         
-        response_data = response.json()
-        image_base64 = response_data['data'][0].get('b64_json')
+        image_bytes = response.content
+        if not image_bytes:
+            raise ValueError("Live API did not return an image.")
 
-        if not image_base64:
-            raise ValueError("Fireworks.ai did not return an image.")
-
-        print("Image generated successfully.")
-        image_bytes = base64.b64decode(image_base64)
-
-        # Upload to Firebase
+        print("Image generated by live API successfully.")
+        
+        # Upload the NEWLY generated image to Firebase
         bucket = storage.bucket()
         destination_blob_name = f"images/{article_slug}-{placeholder_index + 1}.png"
         blob = bucket.blob(destination_blob_name)
@@ -203,28 +255,38 @@ def generate_image_for_placeholder():
         blob.make_public()
         image_url = blob.public_url
         print(f"Image uploaded to Firebase: {image_url}")
-        
-        # Update the database
-        article = Article.query.filter_by(slug=article_slug).first()
-        if article:
-            placeholder_full_tag = f"[IMAGE: {prompt}]"
-            markdown_image_tag = f"![{prompt}]({image_url})"
-            
-            if article.image_url is None:
-                article.image_url = image_url
-            
-            article.content = article.content.replace(placeholder_full_tag, markdown_image_tag, 1)
-            db.session.commit()
 
-        return jsonify({"imageUrl": image_url})
-
-    except requests.exceptions.HTTPError as http_err:
-        print(f"HTTP error occurred: {http_err} - {http_err.response.text}")
-        return jsonify({"error": "Failed to generate image due to an API error."}), 500
     except Exception as e:
-        print(f"A critical error occurred in generate_image_for_placeholder: {e}")
-        return jsonify({"error": "Failed to generate image."}), 500
+        print(f"!!! Live image generation failed: {e}. Attempting to use fallback image. !!!")
+        # --- THIS IS THE NEW FALLBACK LOGIC ---
+        image_url = get_random_fallback_image()
+        # --- END OF NEW LOGIC ---
 
+    # --- This part now runs for BOTH successful generation AND successful fallback ---
+    if image_url:
+        try:
+            # Update the Article in the Database
+            article = Article.query.filter_by(slug=article_slug).first()
+            if article:
+                placeholder_full_tag = f"[IMAGE: {prompt}]"
+                markdown_image_tag = f"![{prompt}]({image_url})"
+                
+                if article.image_url is None:
+                    article.image_url = image_url
+                
+                article.content = article.content.replace(placeholder_full_tag, markdown_image_tag, 1)
+                db.session.commit()
+                print("Database updated with new image URL.")
+
+            return jsonify({"imageUrl": image_url})
+        except Exception as db_error:
+            print(f"A critical error occurred during database update: {db_error}")
+            return jsonify({"error": "Failed to update article with image."}), 500
+    else:
+        # This only happens if BOTH live generation AND the fallback fail
+        print("CRITICAL: Both live generation and fallback failed. No image will be used.")
+        return jsonify({"error": "Failed to generate or find a fallback image."}), 500
+    
 # The get_article route remains exactly the same
 @app.route('/api/get-article/<slug>', methods=['GET'])
 def get_article(slug):
