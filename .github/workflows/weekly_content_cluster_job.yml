@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  build-and-run-weekly-script:
+  build-and-run-script:
     runs-on: ubuntu-latest
     
     steps:
@@ -29,6 +29,19 @@ jobs:
       # --- FIX #1: Use the robust single-quoted version ---
       # This prevents the shell from mangling the JSON content.
       run: echo "${{ secrets.FIREBASE_CREDENTIALS_JSON }}" > backend/firebase-credentials.json
+
+    - name: Debug Environment Variables
+      run: |
+        echo "GENERATION_API_URL is: ${{ env.GENERATION_API_URL }}"
+        echo "GROQ_API_KEY is present: ${{ env.GROQ_API_KEY != '' }}"
+        echo "First 5 chars of GROQ_API_KEY: ${{ env.GROQ_API_KEY_START }}"
+      env:
+        # We need to map the secrets to env variables for this step too
+        GENERATION_API_URL: ${{ secrets.GENERATION_API_URL }}
+        GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+        # We create a new temporary variable with the start of the key for safe logging
+        GROQ_API_KEY_START: ${{ secrets.GROQ_API_KEY_START }}
+    # --- END OF DEBUGGING STEP ---
 
     - name: Run Weekly Content Worker
       env:
