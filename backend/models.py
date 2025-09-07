@@ -3,6 +3,20 @@ from flask_sqlalchemy import SQLAlchemy
 
 db = SQLAlchemy()
 
+article_categories = db.Table('article_categories',
+    db.Column('article_id', db.Integer, db.ForeignKey('article.id'), primary_key=True),
+    db.Column('category_id', db.Integer, db.ForeignKey('category.id'), primary_key=True)
+)
+
+class Category(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), unique=True, nullable=False)
+    slug = db.Column(db.String(100), unique=True, nullable=False)
+
+    def to_dict(self):
+        return {'name': self.name, 'slug': self.slug}
+
+
 class Article(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     slug = db.Column(db.String(255), nullable=False) # Slugs may not be unique across languages
@@ -14,6 +28,8 @@ class Article(db.Model):
     is_published = db.Column(db.Boolean, default=True, nullable=False)
     author_name = db.Column(db.String(255), nullable=True)
     author_bio = db.Column(db.Text, nullable=True)
+    categories = db.relationship('Category', secondary=article_categories, lazy='subquery',
+        backref=db.backref('articles', lazy=True))
 
     # Link translations together
     original_article_id = db.Column(db.Integer, db.ForeignKey('article.id'), nullable=True)
@@ -31,7 +47,8 @@ class Article(db.Model):
             'is_published': self.is_published,
             'authorName': self.author_name,
             'authorBio': self.author_bio,
-            'translations': [{'lang': t.lang, 'slug': t.slug} for t in self.translations]
+            'translations': [{'lang': t.lang, 'slug': t.slug} for t in self.translations],
+            'categories': [category.to_dict() for category in self.categories] if self.categories else []
         }
 
     def to_admin_dict(self):

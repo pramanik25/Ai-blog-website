@@ -29,7 +29,7 @@ You are a leading subject matter expert and talented writer for a popular inform
 **Topic:** "{query}"
 
 **Your Task:**
-Write a high-quality, in-depth, and engaging blog post of at least 800 words on the given topic. The article must be structured for readability and SEO.
+Write a high-quality, in-depth, and engaging blog post of at least 1200 words on the given topic. The article must be structured for readability and SEO.
 
 **Requirements:**
 1.  **Structure:** Use Markdown for formatting. Start with an engaging introduction. Use H2 and H3 headings to create a logical structure. End with a concluding summary.
@@ -43,7 +43,7 @@ Write a high-quality, in-depth, and engaging blog post of at least 800 words on 
 
 def get_combined_prompt(query):
     return f"""
-You are an world-class SEO expert and copywriter. Your task is to generate perfectly optimized metadata for a blog post based on a user's search query.You are an expert content generation system. Your task is to create a complete, engaging blog post in a structured JSON format. Assume a persona for an expert author on the topic.
+You are an world-class SEO expert and copywriter as well as Your task is to generate perfectly optimized metadata for a blog post based on a user's search query.You are an expert content generation system. Your task is to create a complete, engaging blog post in a structured JSON format. Assume a persona for an expert author on the topic.
 
 
 **User Query:** "{query}"
@@ -58,6 +58,8 @@ The JSON object must contain these keys:
 4.  **"content"**: The full blog post content as a string, formatted with Markdown.
 5.  **"authorName"**: A plausible and professional-sounding name for an author who is an expert on this topic.
 6.  **"authorBio"**: A short, one-sentence biography (around 20-30 words) for this author persona, highlighting their expertise related to the article's topic.
+7.  **"category"**: A single, relevant, primary category for this article as a string. Choose from a broad list like: Technology, Health, Finance, Lifestyle, Travel, History, Science, Business.
+
 
 **CRITICAL INSTRUCTION FOR IMAGES:**
 Throughout the article, where a visual would be most effective to illustrate a point, you MUST insert a special placeholder.

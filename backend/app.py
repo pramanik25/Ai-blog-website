@@ -11,8 +11,10 @@ from models import db, Article
 from prompts import get_combined_prompt # We still use our great prompt!
 import firebase_admin
 from firebase_admin import credentials, storage
-import replicate # For image generation
-import requests # To download the generated image
+from models import db, Article, Category 
+import requests
+import base64
+from slugify import slugify
 
 # Load environment variables
 load_dotenv()
@@ -62,61 +64,67 @@ FIREWORKS_MODEL_ID = "accounts/fireworks/models/stable-diffusion-xl-lightning-4s
 
 
 # --- API ROUTES ---
+
 @app.route('/api/generate-content', methods=['POST'])
 def generate_content_text_only():
-    """
-    This endpoint is now super fast. It ONLY generates the text content
-    with placeholders and saves it as a draft.
-    """
     query = request.json.get('query')
     if not query:
         return jsonify({"error": "Query is required"}), 400
 
-    response_content = None # Initialize for logging
-    data = {} # Initialize data
+    response_content = None
+    data = {}
     try:
-        # --- Stage 1: Generate Text Content with Placeholders ---
+        # --- Stage 1: Get AI Response (Unified Logic) ---
+        print("Attempting API call for text generation...")
+        combined_prompt = get_combined_prompt(query)
         try:
-            print("Attempting API call for text generation...")
-            combined_prompt = get_combined_prompt(query)
-            
-            # --- FIX #1: Use the correct variable name 'client' ---
+            # First, try the fast, clean JSON mode
             chat_completion = client.chat.completions.create(
                 messages=[{"role": "user", "content": combined_prompt}],
-                model="llama-3.1-8b-instant", # Use correct model from Groq playground
+                model="llama-3.1-8b-instant", # Use the correct, active model from Groq playground
                 temperature=0.7,
                 response_format={"type": "json_object"},
             )
             response_content = chat_completion.choices[0].message.content
-            data = json.loads(response_content)
-            print("Text generation successful.")
+            print("JSON mode successful.")
         except Exception as e:
+            # If it fails, fall back to text mode
             print(f"JSON mode failed: {e}. Retrying in text mode...")
-            
-            # --- FIX #2: Restore the complete fallback logic ---
-            combined_prompt = get_combined_prompt(query) # Re-get prompt
-            # --- Use the correct variable name 'client' here too ---
             chat_completion = client.chat.completions.create(
                 messages=[{"role": "user", "content": combined_prompt}],
                 model="llama-3.1-8b-instant",
                 temperature=0.7,
             )
             response_content = chat_completion.choices[0].message.content
-            json_start = response_content.find('{')
-            json_end = response_content.rfind('}') + 1
-            if json_start != -1 and json_end != -1:
-                json_string = response_content[json_start:json_end]
-                data = json.loads(json_string, strict=False)
-                print("Text mode fallback successful.")
-            else:
-                raise ValueError("No valid JSON object found in the AI response even after fallback.")
+            print("Text mode fallback successful.")
+        
+        # --- Stage 2: Clean and Parse the Response (Unified Logic) ---
+        print("Cleaning and parsing AI response...")
+        # Fix the multi-line string """content""" issue if it exists
+        # The lambda function takes the captured content, escapes it for JSON, and wraps it in standard double quotes.
+        cleaned_response = re.sub(
+            r'"content":\s*"""(.*?)"""',
+            lambda match: f'"content": {json.dumps(match.group(1))}',
+            response_content,
+            flags=re.DOTALL
+        )
+        
+        # Find and extract the JSON object from the potentially messy string
+        json_start = cleaned_response.find('{')
+        json_end = cleaned_response.rfind('}') + 1
+        if json_start != -1 and json_end != -1:
+            json_string = cleaned_response[json_start:json_end]
+            data = json.loads(json_string, strict=False)
+            print("Parsing successful.")
+        else:
+            raise ValueError("No valid JSON object found in the AI response after cleaning.")
         
         if data.get("title") == "Invalid Topic Request":
             return jsonify({"error": "The requested topic could not be generated."}), 422
 
-        # --- Stage 2: Save Text-Only Article to Database ---
+        # --- Stage 3: Save to Database ---
         slug = data['slug']
-        existing_article = Article.query.filter_by(slug=slug).first()
+        existing_article = Article.query.filter_by(slug=slug, lang='en').first()
         if existing_article:
             return jsonify(existing_article.to_dict()), 200
 
@@ -125,10 +133,19 @@ def generate_content_text_only():
             title=data['title'],
             meta_description=data['meta_description'],
             content=data['content'],
-            is_published=True,
-            author_name=data.get('authorName'), 
+            is_published=True, # Save as draft
+            author_name=data.get('authorName'),
             author_bio=data.get('authorBio'),
         )
+        
+        category_name = data.get('category')
+        if category_name:
+            category = Category.query.filter_by(name=category_name).first()
+            if not category:
+                category = Category(name=category_name, slug=slugify(category_name))
+                db.session.add(category)
+            new_article.categories.append(category)
+
         db.session.add(new_article)
         db.session.commit()
 
@@ -139,9 +156,8 @@ def generate_content_text_only():
         print(f"A critical error occurred in generate_content_text_only: {e}")
         if response_content:
             print(f"---AI TEXT RESPONSE THAT CAUSED FAILURE---\n{response_content}")
-        return jsonify({"error": "A critical error occurred during text generation."}), 500
-
-
+        return jsonify({"error": "A critical error occurred."}), 500
+    
 @app.route('/api/generate-image', methods=['POST'])
 def generate_image_for_placeholder():
     """
@@ -258,6 +274,38 @@ def get_all_articles():
     except Exception as e:
         print(f"An error occurred while fetching articles: {e}")
         return jsonify({"error": "Failed to fetch articles"}), 500
+    
+    
+@app.route('/api/categories', methods=['GET'])
+def get_all_categories():
+    """Fetches a list of all unique categories."""
+    try:
+        # Query the database for all categories, ordered by name
+        categories = Category.query.order_by(Category.name.asc()).all()
+        category_list = [category.to_dict() for category in categories]
+        return jsonify(category_list)
+    except Exception as e:
+        print(f"An error occurred while fetching categories: {e}")
+        return jsonify({"error": "Failed to fetch categories"}), 500
+
+@app.route('/api/articles/category/<string:category_slug>', methods=['GET'])
+def get_articles_by_category(category_slug):
+    """Fetches all published articles for a specific category."""
+    try:
+        category = Category.query.filter_by(slug=category_slug).first_or_404()
+        published_articles = [
+            article.to_dict() 
+            for article in category.articles 
+            if article.is_published
+        ]
+        
+        return jsonify({
+            "category": category.to_dict(),
+            "articles": published_articles
+        })
+    except Exception as e:
+        print(f"An error occurred while fetching articles for category {category_slug}: {e}")
+        return jsonify({"error": "Failed to fetch articles for this category"}), 500
     
 
     # --- ADMIN API ROUTES ---
