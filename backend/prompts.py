@@ -107,5 +107,4 @@ You MUST output a single, valid JSON object with these exact keys:
 
 **RULES FOR HANDLING QUERIES:**
 - If the query is vague, choose a popular sub-topic.
-- If the query is inappropriate or unsafe, you MUST return a valid JSON object with a 'title' of "Invalid Topic Request".
 """
