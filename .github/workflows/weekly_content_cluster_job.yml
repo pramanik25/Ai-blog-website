@@ -28,10 +28,7 @@ jobs:
         pip install -r backend/requirements.txt
         
     - name: Create Firebase Credentials File
-      run: |
-        cat <<EOF > backend/firebase-credentials.json
-        ${{ secrets.FIREBASE_CREDENTIALS_JSON }}
-         EOF
+      run: echo "${{ secrets.FIREBASE_CREDENTIALS_JSON }}" > backend/firebase-credentials.json
 
     - name: Run Weekly Content Worker
       # This step needs access to the repository to write the weekly_plan.json file
@@ -55,5 +52,3 @@ jobs:
         # Only commit if there are changes
         git diff --staged --quiet || git commit -m "Update weekly content plan"
         git push
-
-      
