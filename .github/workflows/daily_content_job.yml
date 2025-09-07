@@ -39,7 +39,10 @@ jobs:
 
       
     - name: Create Firebase Credentials File
-      run: echo "${{ secrets.FIREBASE_CREDENTIALS_JSON }}" > backend/firebase-credentials.json
+      run: |
+        cat <<EOF > backend/firebase-credentials.json
+        ${{ secrets.FIREBASE_CREDENTIALS_JSON }}
+        EOF
 
     # --- NEW DEBUGGING STEP ---
     # This step will print the environment variables to the log.
