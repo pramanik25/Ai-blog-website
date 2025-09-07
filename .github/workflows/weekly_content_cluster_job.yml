@@ -10,6 +10,9 @@ on:
 jobs:
   build-and-run-weekly-script:
     runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
     
     # --- THIS IS THE FIX ---
     # Set a default working directory for ALL steps in this job.
@@ -55,4 +58,3 @@ jobs:
         git add weekly_plan.json # The plan is now in the same directory
         git diff --staged --quiet || git commit -m "Update weekly content plan"
         git push
-        
