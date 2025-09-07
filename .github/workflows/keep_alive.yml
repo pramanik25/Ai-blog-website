@@ -1,0 +1,22 @@
+# .github/workflows/keep_alive.yml
+
+name: Keep Backend Alive
+
+on:
+  schedule:
+    # This is a CRON string that means "run every 10 minutes".
+    - cron: '*/10 * * * *'
+  # This also allows you to run it manually for testing.
+  workflow_dispatch:
+
+jobs:
+  ping-render-service:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Ping the backend health check endpoint
+      # We use the 'curl' command, which is a standard tool for making HTTP requests.
+      # -s: Silent mode (don't show progress)
+      # -f: Fail silently (the step will fail if the HTTP status is an error, e.g., 500)
+      # The URL is pulled securely from your GitHub Secrets.
+      run: curl -sf ${{ secrets.BACKEND_URL }}/api/health

@@ -69,31 +69,41 @@ def get_weekly_theme_prompt():
 
 
 def get_combined_prompt(query):
+    """
+    This is an advanced prompt designed to generate long-form, high-quality,
+    SEO-optimized blog posts.
+    """
     return f"""
-You are an world-class SEO expert and copywriter as well as Your task is to generate perfectly optimized metadata for a blog post based on a user's search query.You are an expert content generation system. Your task is to create a complete, engaging blog post in a structured JSON format. Assume a persona for an expert author on the topic.
+You are an expert-level content writer and SEO strategist, tasked with creating a comprehensive, in-depth blog post. Your writing style is authoritative, engaging, and easy to understand.
 
+**Primary Keyword/Topic:** "{query}"
 
-**User Query:** "{query}"
+**Your Task:**
+Generate a single, valid JSON object that contains a complete blog post.
 
-**Instructions:**
-You MUST output a single, valid JSON object and nothing else.
-
-The JSON object must contain these keys:
-1.  **"title"**: A highly clickable, SEO-optimized title.
-2.  **"meta_description"**: A compelling meta description.
+**JSON Object Structure:**
+You MUST output a single, valid JSON object with these exact keys:
+1.  **"title"**: A highly clickable, SEO-optimized title that is between 50 and 60 characters.
+2.  **"meta_description"**: A compelling meta description between 140 and 155 characters.
 3.  **"slug"**: A URL-friendly slug based on the title.
-4.  **"content"**: The full blog post content as a string, formatted with Markdown.
-5.  **"authorName"**: A plausible and professional-sounding name for an author who is an expert on this topic.
-6.  **"authorBio"**: A short, one-sentence biography (around 20-30 words) for this author persona, highlighting their expertise related to the article's topic.
-7.  **"category"**: A single, relevant, primary category for this article as a string. Choose from a broad list like: Technology, Health, Finance, Lifestyle, Travel, History, Science, Business.
+4.  **"authorName"**: A plausible and professional-sounding name for an author who is an expert on this topic.
+5.  **"authorBio"**: A short, one-sentence biography for this author persona.
+6.  **"category"**: The single most relevant category for this article.
+7.  **"content"**: The full blog post content as a string, formatted with Markdown.
 
-
-**CRITICAL INSTRUCTION FOR IMAGES:**
-Throughout the article, where a visual would be most effective to illustrate a point, you MUST insert a special placeholder.
-- The placeholder format is: `[IMAGE: A detailed, photorealistic prompt for an image generation model]`
-- **Insert between 2 and 4 of these image placeholders** at natural breaks in the article (e.g., after a section heading).
-- The description inside the placeholder should be rich and descriptive, as it will be used to generate the image. For example: `[IMAGE: A wide cinematic shot of the Grand Canyon at sunrise, with golden light hitting the canyon walls]`
-
+**CRITICAL CONTENT REQUIREMENTS:**
+- **Word Count:** The "content" field MUST be a minimum of **2000 words**.
+- **Structure:** The article must be well-structured and logical. It must include:
+    - An engaging **Introduction** that hooks the reader and states the article's purpose.
+    - At least **5-7 distinct sections**, each with a clear and descriptive H2 (`##`) heading.
+    - Where appropriate, use H3 (`###`) subheadings to break down complex points within the main sections.
+    - At least **two bulleted or numbered lists** to present information clearly.
+    - A thoughtful **Conclusion** that summarizes the key takeaways.
+- **Image Placeholders:** You MUST include **3 to 5** `[IMAGE: A detailed prompt...]` placeholders at natural, visually impactful points in the article.
+- **Tone & Quality:** Write in an expert, confident, and helpful tone. The information must be accurate, detailed, and provide real value to the reader. Avoid fluff and filler content.
+- **SEO:** Naturally incorporate the primary keyword throughout the article, especially in headings and the first 100 words.
+- **Originality:** The content must be unique and not plagiarized. Do not copy from existing sources.
+- **Formatting:** Use proper Markdown syntax for headings, lists, links, and emphasis. Ensure the content is easy to read and visually appealing.
 
 **RULES FOR HANDLING QUERIES:**
 - If the query is vague, choose a popular sub-topic.

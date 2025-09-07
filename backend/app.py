@@ -90,6 +90,10 @@ def get_random_fallback_image():
 
 
 # --- API ROUTES ---
+@app.route('/api/health', methods=['GET'])
+def health_check():
+    """A simple endpoint to verify the service is up and running."""
+    return jsonify({"status": "ok"}), 200
 
 @app.route('/api/generate-content', methods=['POST'])
 def generate_content_text_only():
@@ -264,24 +268,34 @@ def generate_image_for_placeholder():
 
     # --- This part now runs for BOTH successful generation AND successful fallback ---
     if image_url:
+        # --- THIS IS THE DEFINITIVE FIX ---
         try:
-            # Update the Article in the Database
-            article = Article.query.filter_by(slug=article_slug).first()
-            if article:
-                placeholder_full_tag = f"[IMAGE: {prompt}]"
-                markdown_image_tag = f"![{prompt}]({image_url})"
-                
-                if article.image_url is None:
-                    article.image_url = image_url
-                
-                article.content = article.content.replace(placeholder_full_tag, markdown_image_tag, 1)
-                db.session.commit()
-                print("Database updated with new image URL.")
+            # You MUST use the app context for database operations in a background/async task
+            with app.app_context():
+                article_to_update = Article.query.filter_by(slug=article_slug).first()
+                if article_to_update:
+                    placeholder_full_tag = f"[IMAGE: {prompt}]"
+                    if placeholder_full_tag in article_to_update.content:
+                        markdown_image_tag = f"![{prompt}]({image_url})"
+                        
+                        # Set hero image if it's the first one
+                        if article_to_update.image_url is None:
+                            article_to_update.image_url = image_url
+                        
+                        # Replace placeholder and commit
+                        article_to_update.content = article_to_update.content.replace(placeholder_full_tag, markdown_image_tag, 1)
+                        db.session.commit()
+                        print(f"SUCCESS: Database updated for article '{article_slug}'.")
+                    else:
+                        print(f"WARNING: Placeholder already processed for '{prompt}'.")
+                else:
+                    print(f"ERROR: Could not find article with slug '{article_slug}' to update.")
 
             return jsonify({"imageUrl": image_url})
         except Exception as db_error:
             print(f"A critical error occurred during database update: {db_error}")
             return jsonify({"error": "Failed to update article with image."}), 500
+        # --- END OF DEFINITIVE FIX --
     else:
         # This only happens if BOTH live generation AND the fallback fail
         print("CRITICAL: Both live generation and fallback failed. No image will be used.")
@@ -342,11 +356,12 @@ def get_all_categories():
         # Query the database for all categories, ordered by name
         categories = Category.query.order_by(Category.name.asc()).all()
         category_list = [category.to_dict() for category in categories]
+        print(f"Found {len(category_list)} categories to return.")
         return jsonify(category_list)
     except Exception as e:
         print(f"An error occurred while fetching categories: {e}")
         return jsonify({"error": "Failed to fetch categories"}), 500
-
+    
 @app.route('/api/articles/category/<string:category_slug>', methods=['GET'])
 def get_articles_by_category(category_slug):
     """Fetches all published articles for a specific category."""
