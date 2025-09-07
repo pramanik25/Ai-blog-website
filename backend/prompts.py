@@ -40,6 +40,33 @@ Write a high-quality, in-depth, and engaging blog post of at least 1200 words on
 **Do not include a main title (H1) in your output**, as this will be handled by the "title" metadata. Start directly with the introductory paragraph.
 """
 
+def get_weekly_theme_prompt():
+    return """
+    You are an expert SEO and content strategist for a global blog.
+    Your task is to plan a "content cluster" for the upcoming week. A content cluster consists of one main "Pillar Topic" and several supporting "Cluster Topics".
+
+    Instructions:
+    Generate a content plan for a single, popular, evergreen topic (e.g., "Personal Finance", "Fitness for Beginners", "Digital Photography").
+    
+    You MUST respond with ONLY a valid JSON object and nothing else.
+    The JSON object must have this exact structure:
+    {
+      "pillar_topic": "The main, broad topic for the week",
+      "cluster_topics": [
+        "A highly specific, long-tail keyword related to the pillar topic",
+        "Another specific, long-tail keyword",
+        "Another specific, long-tail keyword",
+        "Another specific, long-tail keyword",
+        "Another specific, long-tail keyword",
+        "Another specific, long-tail keyword",
+        "Another specific, long-tail keyword"
+      ],
+      "category": "A single, broad category for all these articles (e.g., Finance, Health, Technology)"
+    }
+
+    Ensure there are exactly 7 cluster topics, one for each day of the week.
+    """
+
 
 def get_combined_prompt(query):
     return f"""
