@@ -38,7 +38,7 @@ def get_or_create_weekly_plan():
             prompt = get_weekly_theme_prompt()
             chat_completion = groq_client.chat.completions.create(
                 messages=[{"role": "user", "content": prompt}],
-                model="llama3-8b-8192",
+                model="llama-3.1-8b-instant",
                 response_format={"type": "json_object"},
             )
             response_content = chat_completion.choices[0].message.content
