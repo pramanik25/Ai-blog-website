@@ -311,43 +311,46 @@ def get_article(slug):
 
 @app.route('/api/articles', methods=['GET'])
 def get_all_articles():
-    # Get query parameters for pagination, with defaults
+    # Get query parameters
     page = request.args.get('page', 1, type=int)
-    limit = request.args.get('limit', 10, type=int) # Default limit is 10, but we'll ask for 2 from the frontend
+    limit = request.args.get('limit', 10, type=int)
     exclude_slug = request.args.get('exclude', None, type=str)
+    # --- THIS IS THE NEW LOGIC ---
+    fetch_all = request.args.get('all', 'false', type=str).lower() == 'true'
 
     try:
-        # Start building the query
         query = Article.query.filter_by(is_published=True)
 
-        # If an exclude_slug is provided, filter it out
         if exclude_slug:
             query = query.filter(Article.slug != exclude_slug)
 
-        # Order by the newest first
         query = query.order_by(Article.id.desc())
         
-        # Paginate the results
-        paginated_articles = query.paginate(page=page, per_page=limit, error_out=False)
+        # --- AND THIS IS THE CONDITIONAL LOGIC ---
+        if fetch_all:
+            # If the client asks for all, skip pagination.
+            articles = query.all()
+            has_more = False
+        else:
+            # Otherwise, use the standard pagination for components like RecentPosts.
+            paginated_articles = query.paginate(page=page, per_page=limit, error_out=False)
+            articles = paginated_articles.items
+            has_more = paginated_articles.has_next
         
-        articles = paginated_articles.items
-        
+        # We need to return the ID for React keys
         article_list = [
-            {"id": article.id,
-              "slug": article.slug, 
-              "title": article.title}
+            {"id": article.id, "slug": article.slug, "title": article.title}
             for article in articles
         ]
         
         return jsonify({
             "articles": article_list,
-            "has_more": paginated_articles.has_next # Tell the frontend if there are more pages
+            "has_more": has_more
         })
 
     except Exception as e:
         print(f"An error occurred while fetching articles: {e}")
         return jsonify({"error": "Failed to fetch articles"}), 500
-    
     
 @app.route('/api/categories', methods=['GET'])
 def get_all_categories():
