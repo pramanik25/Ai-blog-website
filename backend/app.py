@@ -339,7 +339,8 @@ def get_all_articles():
         
         # We need to return the ID for React keys
         article_list = [
-            {"id": article.id, "slug": article.slug, "title": article.title}
+            {"id": article.id, "slug": article.slug, "title": article.title,"meta_description": article.meta_description,
+                "image_url": article.image_url}
             for article in articles
         ]
         
