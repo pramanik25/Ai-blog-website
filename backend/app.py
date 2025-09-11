@@ -236,11 +236,11 @@ def generate_image_for_placeholder():
         print(f"Requesting image from Fireworks.ai for prompt: '{prompt}'")
         
         headers = {
-            "Accept": "image/png",
+            "Accept": "image/jpeg",
             "Content-Type": "application/json",
             "Authorization": f"Bearer {FIREWORKS_API_KEY}"
         }
-        payload = {"prompt": f"{prompt}, cinematic, masterpiece, 8k"}
+        payload = {"prompt": f"{prompt}, cinematic, masterpiece, 8k", "height": 512, "width": 1024,}
         
         response = requests.post(FIREWORKS_API_URL, headers=headers, json=payload, timeout=90)
         response.raise_for_status()
@@ -255,7 +255,7 @@ def generate_image_for_placeholder():
         bucket = storage.bucket()
         destination_blob_name = f"images/{article_slug}-{placeholder_index + 1}.png"
         blob = bucket.blob(destination_blob_name)
-        blob.upload_from_string(image_bytes, content_type='image/png')
+        blob.upload_from_string(image_bytes, content_type='image/jpeg')
         blob.make_public()
         image_url = blob.public_url
         print(f"Image uploaded to Firebase: {image_url}")
