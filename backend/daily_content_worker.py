@@ -11,15 +11,26 @@ from groq import Groq
 
 # Define our target regions and the primary language for each.
 TARGET_REGIONS = {
-    'India':      {'lang': 'hi'}, # Hindi
+    'India':         {'lang': 'hi'}, # Hindi
     'United States': {'lang': 'en'}, # English
-    'France':     {'lang': 'fr'}, # French
-    'Germany':    {'lang': 'de'}, # German
-    'Brazil':     {'lang': 'pt'}, # Portuguese
+    'France':        {'lang': 'fr'}, # French
+    'Germany':       {'lang': 'de'}, # German
+    'Brazil':        {'lang': 'pt'}, # Portuguese
+    'Spain':         {'lang': 'es'}, # Spanish
+    'United Kingdom': {'lang': 'en'}, # English
+    'Canada':        {'lang': 'en'}, # English
+    'Australia':     {'lang': 'en'}, # English
+    'Mexico':        {'lang': 'es'}, # Spanish
+    'Italy':         {'lang': 'it'}, # Italian
+    'Japan':         {'lang': 'ja'}, # Japanese
+    'South Korea':   {'lang': 'ko'}, # Korean
+    'Russia':        {'lang': 'ru'}, # Russian
+    
+     
 }
 
 # The list of all languages we want articles to be available in.
-ALL_TARGET_LANGUAGES = ['en', 'hi', 'fr', 'de', 'pt', 'es']
+ALL_TARGET_LANGUAGES = ['en', 'hi', 'fr', 'de', 'pt', 'es', 'it', 'ja', 'ko', 'ru']
 
 # How many top trending articles to generate per country
 TOPICS_PER_REGION = 3
@@ -48,14 +59,14 @@ def get_ai_generated_topics_for_region(country_name):
         """
         chat_completion = groq_client.chat.completions.create(
             messages=[{"role": "user", "content": prompt}],
-            model="llama-3.1-8b-instant", # Use the correct, active model name
+            model="llama-3.1-8b-instant",
             temperature=1.2,
             response_format={"type": "json_object"},
         )
         response_content = chat_completion.choices[0].message.content
         topics_data = json.loads(response_content)
 
-         # --- THIS IS THE NEW, SMARTER PARSING LOGIC ---
+        # --- THIS IS THE NEW, SMARTER PARSING LOGIC ---
         raw_topics = topics_data if isinstance(topics_data, list) else topics_data.get('topics', [])
         
         # Flatten the list in case the AI returns a list within a list
@@ -66,41 +77,31 @@ def get_ai_generated_topics_for_region(country_name):
             else:
                 topics.append(item)
 
-        # Clean up any non-string items (like the '***')
+        # Clean up any non-string items
         cleaned_topics = [str(topic) for topic in topics if isinstance(topic, str)]
         
         if cleaned_topics:
-            print(f"  - Found and cleaned topics: {cleaned_topics[:TOPICS_PER_REGION]}")
+            print(f"   - Found and cleaned topics: {cleaned_topics[:TOPICS_PER_REGION]}")
             return cleaned_topics[:TOPICS_PER_REGION]
         else:
-            print("  - AI did not return a valid list of topics.")
+            print("   - AI did not return a valid list of topics.")
             return []
-        # --- END OF NEW LOGIC ---
-        
-        # Handle both list and dict responses from the AI
-        topics = topics_data if isinstance(topics_data, list) else topics_data.get('topics', [])
-        
-        if topics:
-            print(f"  - Found topics: {topics}")
-            return topics
-        else:
-            print("  - AI did not return a valid list of topics.")
-            return []
+            
     except Exception as e:
-        print(f"  - AI topic generation failed: {e}")
+        print(f"   - AI topic generation failed: {e}")
         return []
 
 def generate_initial_article(keyword, language_code):
     """Calls our own API to generate the base article in a specific language."""
-    print(f"  - Generating article for: '{keyword}' in language '{language_code}'...")
+    print(f"   - Generating article for: '{keyword}' in language '{language_code}'...")
     try:
         query_with_lang = f"{keyword} (write in {language_code})"
         response = requests.post(GENERATION_API_URL, json={'query': query_with_lang}, timeout=300)
         response.raise_for_status()
-        print("    - Article generated successfully.")
+        print("     - Article generated successfully.")
         return response.json()
     except requests.exceptions.RequestException as e:
-        print(f"    - Error generating article: {e}")
+        print(f"     - Error generating article: {e}")
         return None
 
 def translate_text(text, target_language, source_language):
@@ -110,14 +111,15 @@ def translate_text(text, target_language, source_language):
     
     time.sleep(1 + random.random()) # Polite 1-2 second delay
     
-    print(f"      - Translating from '{source_language}' to '{target_language}'...")
+    print(f"       - Translating from '{source_language}' to '{target_language}'...")
     payload = {'q': text, 'source': source_language, 'target': target_language, 'format': 'text'}
     
     try:
         response = requests.post(LIBRETRANSLATE_API_URL, json=payload, timeout=60)
         response.raise_for_status()
         return response.json().get('translatedText', text)
-    except requests.exceptions.RequestException:
+    except requests.exceptions.RequestException as e:
+        print(f"         - Translation failed: {e}. Returning original text.")
         return text # Return original on failure
 
 def run_daily_job():
@@ -141,9 +143,19 @@ def run_daily_job():
             initial_article = generate_initial_article(keyword, primary_lang)
             
             if not initial_article:
+                print("     - Generation returned nothing. Skipping to next keyword.")
                 continue
 
-            print(f"    --- Processing translations for article: '{initial_article['title']}' ---")
+            # --- NEW: Robust validation of the generated article ---
+            required_keys = ['title', 'meta_description', 'content']
+            if not all(initial_article.get(key) for key in required_keys):
+                print(f"     - FAILED: Initial article for '{keyword}' is incomplete and missing required fields.")
+                print(f"     - Received data: {initial_article}")
+                print("     - Skipping this article.")
+                continue
+            # --- END OF NEW VALIDATION ---
+
+            print(f"     --- Processing translations for article: '{initial_article['title']}' ---")
             
             # --- DATABASE SAVING LOGIC FOR INITIAL ARTICLE ---
             # You would implement your database saving logic here, e.g.:
@@ -158,18 +170,19 @@ def run_daily_job():
                     continue
 
                 try:
-                    translated_title = translate_text(initial_article['title'], lang_code, primary_lang)
-                    translated_desc = translate_text(initial_article['meta_description'], lang_code, primary_lang)
-                    translated_content = translate_text(initial_article['content'], lang_code, primary_lang)
+                    # --- MODIFIED: Safely get content to avoid errors even if validation was missed ---
+                    translated_title = translate_text(initial_article.get('title', ''), lang_code, primary_lang)
+                    translated_desc = translate_text(initial_article.get('meta_description', ''), lang_code, primary_lang)
+                    translated_content = translate_text(initial_article.get('content', ''), lang_code, primary_lang)
                     translated_slug = slugify(translated_title)
 
-                    print(f"    - Successfully prepared translation for '{lang_code}'.")
+                    print(f"     - Successfully prepared translation for '{lang_code}'.")
                     
                     # --- DATABASE SAVING LOGIC FOR TRANSLATION ---
                     # ...
 
                 except Exception as e:
-                    print(f"    - An unexpected error occurred while translating to '{lang_code}': {e}")
+                    print(f"     - An unexpected error occurred while translating to '{lang_code}': {e}")
 
     print("\n--- Daily Content Generation Job Finished ---")
 

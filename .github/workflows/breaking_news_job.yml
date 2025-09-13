@@ -28,6 +28,10 @@ jobs:
     - name: Create Firebase Credentials File
       run: echo "${{ secrets.FIREBASE_CREDENTIALS_JSON }}" > backend/firebase-credentials.json
 
+    - name: Create Firebase Credentials File
+      run: echo "${{ secrets.FIREBASE_CREDENTIALS_JSON }}" > backend/firebase-credentials.json
+
+
     # --- NEW: A step to safely debug your secrets ---
     - name: Debug Secrets
       run: |
@@ -37,5 +41,8 @@ jobs:
     - name: Run Breaking News Worker
       env:
         DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        FIREWORKS_API_KEY: ${{ secrets.FIREWORKS_API_KEY }}
+        FIREBASE_STORAGE_BUCKET: ${{ secrets.FIREBASE_STORAGE_BUCKET }}
+        GENERATION_API_URL: ${{ secrets.GENERATION_API_URL }}
         GROQ_API_KEY: ${{ secrets.GROQ_APISEC_KEY }}
       run: python backend/breaking_news_worker.py
