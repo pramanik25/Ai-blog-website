@@ -67,44 +67,35 @@ def get_weekly_theme_prompt():
     Ensure there are exactly 7 cluster topics, one for each day of the week.
     """
 
-
 def get_combined_prompt(query):
-    """
-    This is an advanced prompt designed to generate long-form, high-quality,
-    SEO-optimized blog posts.
-    """
+    category_list = "['Technology', 'Health', 'Science', 'Business', 'Culture', 'World News', 'Travel', 'Food', 'Finance', 'Education', 'Lifestyle', 'Entertainment']"
+    
     return f"""
-You are an expert-level content writer and SEO strategist, tasked with creating a comprehensive, in-depth blog post. Your writing style is authoritative, engaging, and easy to understand.
+You are a world-class subject matter expert and SEO content strategist. Your task is to write a comprehensive, authoritative, and deeply engaging blog post.
 
-**Primary Keyword/Topic:** "{query}"
+**Primary Topic:** "{query}"
 
 **Your Task:**
-Generate a single, valid JSON object that contains a complete blog post.
+Generate a single, valid JSON object containing the complete blog post.
 
 **JSON Object Structure:**
-You MUST output a single, valid JSON object with these exact keys:
-1.  **"title"**: A highly clickable, SEO-optimized title that is between 50 and 60 characters.
-2.  **"meta_description"**: A compelling meta description between 140 and 155 characters.
-3.  **"slug"**: A URL-friendly slug based on the title.
-4.  **"authorName"**: A plausible and professional-sounding name for an author who is an expert on this topic.
-5.  **"authorBio"**: A short, one-sentence biography for this author persona.
-6.  **"category"**: The single most relevant category for this article.
-7.  **"content"**: The full blog post content as a string, formatted with Markdown.
+- **"title"**: 50-60 characters, highly clickable, and keyword-focused.
+- **"meta_description"**: 140-155 characters, compelling summary with a call-to-action.
+- **"slug"**: A URL-friendly slug.
+- **"authorName"**: A plausible expert author name.
+- **"authorBio"**: A short, one-sentence author bio.
+- **"category"**: MUST BE ONE from this list: {category_list}.
+- **"content"**: The full blog post in Markdown format.
 
 **CRITICAL CONTENT REQUIREMENTS:**
-- **Word Count:** The "content" field MUST be a minimum of **2000 words**.
-- **Structure:** The article must be well-structured and logical. It must include:
-    - An engaging **Introduction** that hooks the reader and states the article's purpose.
-    - At least **5-7 distinct sections**, each with a clear and descriptive H2 (`##`) heading.
-    - Where appropriate, use H3 (`###`) subheadings to break down complex points within the main sections.
-    - At least **two bulleted or numbered lists** to present information clearly.
-    - A thoughtful **Conclusion** that summarizes the key takeaways.
-- **Image Placeholders:** You MUST include **3 to 5** `[IMAGE: A detailed prompt...]` placeholders at natural, visually impactful points in the article.
-- **Tone & Quality:** Write in an expert, confident, and helpful tone. The information must be accurate, detailed, and provide real value to the reader. Avoid fluff and filler content.
-- **SEO:** Naturally incorporate the primary keyword throughout the article, especially in headings and the first 100 words.
-- **Originality:** The content must be unique and not plagiarized. Do not copy from existing sources.
-- **Formatting:** Use proper Markdown syntax for headings, lists, links, and emphasis. Ensure the content is easy to read and visually appealing.
-
-**RULES FOR HANDLING QUERIES:**
-- If the query is vague, choose a popular sub-topic.
+- **Length:** Minimum **2500 words**.
+- **Structure & Quality:**
+    -   Start with a captivating introduction that includes the primary keyword in the first 100 words.
+    -   Include a **"Key Takeaways"** section near the beginning as a bulleted list summarizing the main points.
+    -   Use at least 5-7 descriptive H2 (`##`) headings for the main sections.
+    -   Use H3 (`###`) subheadings to break down complex topics.
+    -   Include **3 to 5** `[IMAGE: A detailed description of the image for AI generation]` placeholders. The description should also serve as perfect alt-text.
+    -   End the article with a powerful **Conclusion**.
+    -   After the conclusion, add an **"Frequently Asked Questions (FAQ)"** section with 3-5 relevant questions and concise answers about the topic. This is crucial for SEO.
+- **Tone:** Expert, authoritative, and trustworthy.
 """

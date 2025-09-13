@@ -1,0 +1,33 @@
+# /.github/workflows/breaking_news_job.yml
+
+name: Breaking News Generation
+
+on:
+  schedule:
+    - cron: '0 */3 * * *'
+  workflow_dispatch:
+
+jobs:
+  run-breaking-news-script:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Check out repository
+      uses: actions/checkout@v3
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r backend/requirements.txt
+
+    - name: Run Breaking News Worker
+      env:
+        DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        GROQ_API_KEY: ${{ secrets.GROQ_APISec_KEY }}
+        NEWS_API_KEY: ${{ secrets.NEWS_API_KEY }} 
+      run: python backend/breaking_news_worker.py

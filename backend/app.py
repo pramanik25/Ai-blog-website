@@ -16,6 +16,8 @@ import requests
 import random
 import base64
 from slugify import slugify
+from flask_migrate import Migrate
+from sqlalchemy import func
 
 # Load environment variables
 load_dotenv()
@@ -49,6 +51,7 @@ app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
 }
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db.init_app(app)
+migrate = Migrate(app, db)
 
 with app.app_context():
     db.create_all()
@@ -151,6 +154,28 @@ def generate_content_text_only():
         
         if data.get("title") == "Invalid Topic Request":
             return jsonify({"error": "The requested topic could not be generated."}), 422
+        
+        # --- NEW: Automated Internal Linking Logic ---
+        article_content = data['content']
+        # Find 2 older relevant articles to link to
+        search_terms = data['title'].split(' ')[-3:] # Use last 3 words of title for search
+        search_query = func.plainto_tsquery('english', ' & '.join(search_terms))
+        
+        relevant_articles = db.session.query(Article.title, Article.slug)\
+            .filter(Article.is_published == True)\
+            .filter(func.to_tsvector('english', Article.title).match(search_query))\
+            .limit(2).all()
+
+        if relevant_articles:
+            links_markdown = "\n\n### Read More:\n"
+            for rel_title, rel_slug in relevant_articles:
+                links_markdown += f"- [{rel_title}](/blog/{rel_slug})\n"
+            
+            # Append the links to the end of the new article's content
+            article_content += links_markdown
+            data['content'] = article_content # Update the content
+        # --- END of Internal Linking Logic ---
+
 
         # --- Stage 3: Save to Database ---
         slug = data['slug']
@@ -386,6 +411,25 @@ def get_articles_by_category(category_slug):
         return jsonify({"error": "Failed to fetch articles for this category"}), 500
     
 
+@app.route('/api/articles/breaking', methods=['GET'])
+def get_breaking_articles():
+    """Fetches the most recent breaking news articles."""
+    try:
+        limit = request.args.get('limit', 5, type=int)
+        articles = Article.query.filter_by(is_published=True, is_breaking_news=True)\
+            .order_by(Article.id.desc())\
+            .limit(limit)\
+            .all()
+        
+        article_list = [
+            {"id": article.id, "slug": article.slug, "title": article.title, "meta_description": article.meta_description, "image_url": article.image_url}
+            for article in articles
+        ]
+        return jsonify(article_list)
+    except Exception as e:
+        print(f"An error occurred while fetching breaking articles: {e}")
+        return jsonify({"error": "Failed to fetch breaking news"}), 500
+    
     # --- ADMIN API ROUTES ---
 
 ADMIN_SECRET_KEY = os.getenv("ADMIN_SECRET_KEY")
@@ -530,6 +574,52 @@ def admin_regenerate_image(article_id):
     except Exception as e:
         print(f"A critical error occurred in admin_regenerate_image: {e}")
         return jsonify({"error": "Failed to regenerate image."}), 500
+    
+
+@app.route('/api/search', methods=['GET'])
+def search_articles():
+    """Searches articles using PostgreSQL's full-text search."""
+    query_term = request.args.get('q', '').strip()
+
+    if not query_term:
+        return jsonify([]) # Return empty list if query is empty
+
+    try:
+        # We will search in both the title and the content of the article.
+        # 'english' is the search configuration, tsvector creates the document,
+        # and to_tsquery creates the search query.
+        search_query = func.plainto_tsquery('english', query_term)
+        
+        # We rank the results based on how relevant they are.
+        rank = func.ts_rank(
+            func.to_tsvector('english', Article.title + ' ' + Article.content),
+            search_query
+        ).label('rank')
+
+        # Find all published articles that match the search query.
+        results = db.session.query(Article)\
+            .filter(Article.is_published == True)\
+            .filter(
+                func.to_tsvector('english', Article.title + ' ' + Article.content).match(search_query)
+            )\
+            .order_by(rank.desc())\
+            .limit(10)\
+            .all()
+
+        # Convert results to a list of dictionaries
+        search_results = [
+            {
+                'title': article.title,
+                'slug': article.slug,
+                'meta_description': article.meta_description
+            } for article in results
+        ]
+        
+        return jsonify(search_results)
+
+    except Exception as e:
+        print(f"An error occurred during search: {e}")
+        return jsonify({"error": "Search failed"}), 500
 
 if __name__ == '__main__':
     app.run(debug=True, port=5001)
