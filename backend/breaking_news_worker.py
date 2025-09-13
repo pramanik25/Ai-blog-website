@@ -12,7 +12,7 @@ import feedparser
 NEWS_API_KEY = os.getenv("NEWS_API_KEY")
 NEWS_API_URL = "https://newsapi.org/v2/top-headlines"
 ARTICLES_TO_GENERATE = 2
-groq_client = Groq(api_key=os.getenv("GROQ_APISec_KEY"))
+groq_client = Groq(api_key=os.getenv("GROQ_APISEC_KEY"))
 
 
 ## --- STEP 1: NEWS DISCOVERY (USING NEWSAPI) ---

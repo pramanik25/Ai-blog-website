@@ -37,6 +37,5 @@ jobs:
     - name: Run Breaking News Worker
       env:
         DATABASE_URL: ${{ secrets.DATABASE_URL }}
-        # CORRECTED: Fixed the typo from GROQ_APISec_KEY to GROQ_API_KEY
-        GROQ_API_KEY: ${{ secrets.GROQ_APISec_KEY }}
+        GROQ_API_KEY: ${{ secrets.GROQ_APISEC_KEY }}
       run: python backend/breaking_news_worker.py
