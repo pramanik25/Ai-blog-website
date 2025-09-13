@@ -4,7 +4,6 @@ name: Breaking News Generation
 
 on:
   schedule:
-    # This runs the job every 3 hours.
     - cron: '0 */3 * * *'
   workflow_dispatch:
 
@@ -26,8 +25,13 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r backend/requirements.txt
 
+    # <-- ADD THIS STEP
+    - name: Create Firebase Credentials File
+      run: echo "${{ secrets.FIREBASE_CREDENTIALS_JSON }}" > backend/firebase-credentials.json
+
     - name: Run Breaking News Worker
       env:
         DATABASE_URL: ${{ secrets.DATABASE_URL }}
         GROQ_API_KEY: ${{ secrets.GROQ_APISec_KEY }}
+        # NEWS_API_KEY is correctly removed as per our last update
       run: python backend/breaking_news_worker.py
