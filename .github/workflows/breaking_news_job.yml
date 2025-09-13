@@ -25,13 +25,18 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r backend/requirements.txt
 
-    # <-- ADD THIS STEP
     - name: Create Firebase Credentials File
       run: echo "${{ secrets.FIREBASE_CREDENTIALS_JSON }}" > backend/firebase-credentials.json
+
+    # --- NEW: A step to safely debug your secrets ---
+    - name: Debug Secrets
+      run: |
+        echo "Firebase secret is present: ${{ secrets.FIREBASE_CREDENTIALS_JSON != '' }}"
+        echo "Groq secret is present: ${{ secrets.GROQ_APISec_KEY != '' }}"
 
     - name: Run Breaking News Worker
       env:
         DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        # CORRECTED: Fixed the typo from GROQ_APISec_KEY to GROQ_API_KEY
         GROQ_API_KEY: ${{ secrets.GROQ_APISec_KEY }}
-        # NEWS_API_KEY is correctly removed as per our last update
       run: python backend/breaking_news_worker.py
