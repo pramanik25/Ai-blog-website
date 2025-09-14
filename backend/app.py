@@ -37,10 +37,19 @@ CORS(app, origins=allowed_origins, supports_credentials=True)
 
 # --- Ensure your Firebase setup is present ---
 if not firebase_admin._apps:
-    cred = credentials.Certificate("firebase-credentials.json")
-    firebase_admin.initialize_app(cred, {
-        'storageBucket': os.getenv("FIREBASE_STORAGE_BUCKET")
-    })
+    # Get the absolute path to the directory containing this script (app.py)
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+    # Join that path with the credentials filename to create the correct path
+    CRED_PATH = os.path.join(BASE_DIR, "firebase-credentials.json")
+
+    try:
+        cred = credentials.Certificate(CRED_PATH)
+        firebase_admin.initialize_app(cred, {
+            'storageBucket': os.getenv("FIREBASE_STORAGE_BUCKET")
+        })
+        print("Firebase Admin SDK initialized successfully.")
+    except Exception as e:
+        print(f"!!! CRITICAL: Failed to initialize Firebase Admin SDK: {e} !!!")
 
     
 # Configure Database (this stays the same)
