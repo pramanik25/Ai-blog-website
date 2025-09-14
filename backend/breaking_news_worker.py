@@ -1,4 +1,3 @@
-# /backend/breaking_news_worker.py
 import os
 import requests
 import time
@@ -10,23 +9,22 @@ from app import app, db, Article, Category
 import feedparser
 from prompts import get_keyword_prompt
 import random
-from firebase_admin import storage
 import firebase_admin
 from firebase_admin import credentials, storage
 
-
 ## --- CONFIGURATION ---
 ARTICLES_TO_GENERATE = 5
-# --- FIX #1: Corrected the API key variable name ---
-groq_client = Groq(api_key=os.getenv("GROQ_APISEC_KEY"))
+groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
 # --- IMAGE GENERATION CONFIG ---
 FIREWORKS_API_KEY = os.getenv("FIREWORKS_API_KEY")
 FIREWORKS_API_URL = "https://api.fireworks.ai/inference/v1/workflows/accounts/fireworks/models/flux-1-schnell-fp8/text_to_image"
 
+# --- ENSURE FIREBASE IS INITIALIZED ---
+# This block makes the worker self-sufficient. Since the worker imports 'app',
+# this check prevents re-initialization, but it's good practice for clarity.
 if not firebase_admin._apps:
     try:
-        # Use the path-aware logic to find the credentials file
         BASE_DIR = os.path.dirname(os.path.abspath(__file__))
         CRED_PATH = os.path.join(BASE_DIR, "firebase-credentials.json")
         cred = credentials.Certificate(CRED_PATH)
@@ -38,33 +36,38 @@ if not firebase_admin._apps:
         print(f"!!! CRITICAL: Worker failed to initialize Firebase: {e} !!!")
 
 
-## --- STEP 1: NEWS DISCOVERY ---
-def fetch_headlines_from_rss():
-    """Fetches and combines headlines from a list of RSS feeds."""
-    RSS_FEEDS = [
-        'http://feeds.bbci.co.uk/news/world/rss.xml',
-        'https://timesofindia.indiatimes.com/rssfeedstopstories.cms',
-        'https://news.google.com/rss?gl=IN&hl=en-IN&ceid=IN:en',
-        'https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml',
-        'https://www.aljazeera.com/xml/rss/all.xml',
-        'https://www.theguardian.com/world/rss',
-        'https://www.reutersagency.com/feed/?best-topics=top-news',
-        'https://www.wired.com/feed/category/science/latest/rss',
+## --- STEP 1: NEWS DISCOVERY (AI-POWERED) ---
+def get_trending_topics():
+    """Asks the AI to identify the top trending news topics for today."""
+    print("Asking AI to identify today's top trending news topics...")
+    current_date = time.strftime("%A, %B %d, %Y")
+    location = "Patna, Bihar, India"
 
-    ]
-    all_headlines = []
-    print("Fetching headlines from RSS feeds...")
-    for url in RSS_FEEDS:
-        try:
-            feed = feedparser.parse(url)
-            for entry in feed.entries:
-                all_headlines.append(entry.title)
-        except Exception as e:
-            print(f"Could not parse RSS feed {url}. Error: {e}")
-    
-    unique_headlines = list(set(all_headlines))
-    print(f"Found {len(unique_headlines)} unique headlines.")
-    return unique_headlines
+    prompt = f"""
+    You are an expert news aggregator and editor-in-chief. Your job is to identify the most important and widely discussed news headlines in the world right now, for the date {current_date}.
+
+    Create a list of 7 diverse headlines. The list should be a mix of:
+    - 3 major **global** news stories (e.g., international politics, major tech breakthroughs, science).
+    - 4 major **Indian** news stories (e.g., national politics, business in India, cultural events, sports).
+
+    Focus on topics that are genuinely trending and have high public interest.
+
+    You MUST respond with ONLY a valid JSON object with a single key "headlines", which is an array of 7 strings. Do not add any other text.
+    """
+    try:
+        chat_completion = groq_client.chat.completions.create(
+            messages=[{"role": "user", "content": prompt}],
+            model="llama-3.1-8b-instant",
+            temperature=1.0,
+            response_format={"type": "json_object"},
+        )
+        data = json.loads(chat_completion.choices[0].message.content)
+        headlines = data.get("headlines", [])
+        print(f"AI identified trending topics: {headlines}")
+        return headlines
+    except Exception as e:
+        print(f"Error getting trending topics from Groq: {e}")
+        return []
 
 ## --- IMAGE GENERATION & UPLOAD FUNCTIONS ---
 def generate_image(prompt):
@@ -110,7 +113,9 @@ def get_random_fallback_image():
         image_urls = [blob.public_url for blob in blobs if blob.name != 'images/']
         if not image_urls:
             return None
-        return random.choice(image_urls)
+        random_url = random.choice(image_urls)
+        print(f"--- Fallback successful: {random_url} ---")
+        return random_url
     except Exception as e:
         print(f"--- Fallback failed with an error: {e} ---")
         return None
@@ -126,7 +131,6 @@ def get_news_generation_prompt(headline, keywords=None):
 **SEO Keyword Integration:**
 You MUST naturally weave the following keywords into the article, especially in the H2 and H3 headings: {keyword_list_str}."""
 
-    # --- FIX #2: Restored the full, detailed prompt requirements ---
     return f"""
     You are a professional journalist for a major international news outlet. Your writing is objective, factual, and follows the "inverted pyramid" structure.
 
@@ -144,7 +148,8 @@ You MUST naturally weave the following keywords into the article, especially in 
     - **Image Placeholders:** Include exactly **two** `[IMAGE: A detailed, journalistic prompt for a relevant news photo]` placeholders.
 
     **JSON Output Structure:**
-    You MUST generate a single, valid JSON object with these exact keys:
+    You MUST generate a single, valid JSON object. Do not include any text, notes, or markdown formatting like ```json before or after the object. The "content" field must be a valid JSON string, correctly escaping all special characters like newlines (\\n) and quotes (\\").
+    The JSON object must have these exact keys:
     -   "title": The original headline.
     -   "meta_description": A concise, SEO-friendly summary (under 155 characters).
     -   "category": The single most relevant news category from this list: {category_list}.
@@ -177,7 +182,7 @@ def generate_article_with_groq_v2(headline):
         prompt = get_news_generation_prompt(headline, seo_keywords)
         chat_completion = groq_client.chat.completions.create(
             messages=[{"role": "user", "content": prompt}],
-            model="llama-3.1-8b-instant",
+            model="llama-3.3-70b-versatile",
             temperature=0.6,
             response_format={"type": "json_object"},
         )
@@ -240,11 +245,11 @@ def generate_article_with_groq_v2(headline):
 
 ## --- MAIN JOB ORCHESTRATION ---
 def run_breaking_news_job():
-    print("--- Starting Breaking News Job (RSS + Groq V2 + Images) ---")
+    print("--- Starting Breaking News Job (AI Aggregator + Groq V2 + Images) ---")
     with app.app_context():
-        headlines = fetch_headlines_from_rss()
+        headlines = get_trending_topics()
         if not headlines:
-            print("No headlines found. Exiting job.")
+            print("AI did not identify any trending topics. Exiting job.")
             return
 
         generated_count = 0
