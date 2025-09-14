@@ -354,10 +354,9 @@ def generate_image_for_placeholder():
         return jsonify({"error": "Failed to generate or find a fallback image."}), 500
     
 # The get_article route remains exactly the same
-@app.route('/api/get-article/<lang>/<slug>', methods=['GET'])
-def get_article(lang, slug):
-    # The query now filters by both lang and slug
-    article = Article.query.filter_by(lang=lang, slug=slug, is_published=True).first()
+@app.route('/api/get-article/<slug>', methods=['GET'])
+def get_article(slug):
+    article = Article.query.filter_by(slug=slug, is_published=True).first()
     if article:
         return jsonify(article.to_dict())
     return jsonify({"error": "Article not found"}), 404
