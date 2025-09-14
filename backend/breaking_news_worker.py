@@ -18,7 +18,7 @@ from firebase_admin import credentials, storage
 ## --- CONFIGURATION ---
 ARTICLES_TO_GENERATE = 2
 # --- FIX #1: Corrected the API key variable name ---
-groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+groq_client = Groq(api_key=os.getenv("GROQ_APISEC_KEY"))
 
 # --- IMAGE GENERATION CONFIG ---
 FIREWORKS_API_KEY = os.getenv("FIREWORKS_API_KEY")
@@ -171,7 +171,7 @@ def generate_article_with_groq_v2(headline):
         prompt = get_news_generation_prompt(headline, seo_keywords)
         chat_completion = groq_client.chat.completions.create(
             messages=[{"role": "user", "content": prompt}],
-            model="llama-3.1-70b-versatile",
+            model="llama-3.1-8b-instant",
             temperature=0.6,
             response_format={"type": "json_object"},
         )
