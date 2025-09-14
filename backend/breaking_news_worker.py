@@ -11,6 +11,9 @@ import feedparser
 from prompts import get_keyword_prompt
 import random
 from firebase_admin import storage
+import firebase_admin
+from firebase_admin import credentials, storage
+
 
 ## --- CONFIGURATION ---
 ARTICLES_TO_GENERATE = 2
@@ -20,6 +23,20 @@ groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 # --- IMAGE GENERATION CONFIG ---
 FIREWORKS_API_KEY = os.getenv("FIREWORKS_API_KEY")
 FIREWORKS_API_URL = "https://api.fireworks.ai/inference/v1/workflows/accounts/fireworks/models/flux-1-schnell-fp8/text_to_image"
+
+if not firebase_admin._apps:
+    try:
+        # Use the path-aware logic to find the credentials file
+        BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+        CRED_PATH = os.path.join(BASE_DIR, "firebase-credentials.json")
+        cred = credentials.Certificate(CRED_PATH)
+        firebase_admin.initialize_app(cred, {
+            'storageBucket': os.getenv("FIREBASE_STORAGE_BUCKET")
+        })
+        print("Firebase Admin SDK initialized by worker.")
+    except Exception as e:
+        print(f"!!! CRITICAL: Worker failed to initialize Firebase: {e} !!!")
+
 
 ## --- STEP 1: NEWS DISCOVERY ---
 def fetch_headlines_from_rss():
