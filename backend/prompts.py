@@ -134,3 +134,29 @@ Generate a single, valid JSON object containing the complete blog post.
     -   After the conclusion, add an **"Frequently Asked Questions (FAQ)"** section with 3-5 relevant questions and concise answers about the topic. This is crucial for SEO.
 - **Tone:** Expert, authoritative, and trustworthy.
 """
+
+
+def get_ebook_outline_prompt():
+    return """
+    You are an expert author and content strategist tasked with outlining a compelling, non-fiction ebook for beginners on a popular topic.
+
+    **Your Task:**
+    Generate a complete outline for an ebook. The outline must be logical, starting with an introduction, building through core concepts, and ending with a conclusion.
+
+    You MUST respond with ONLY a valid JSON object with this exact structure:
+    {
+      "ebook_title": "A highly engaging and marketable title for the book.",
+      "subtitle": "A clear, descriptive subtitle.",
+      "category": "The single, broad category for all these articles (e.g., Finance, Health, Technology).",
+      "chapters": [
+        { "title": "Introduction: A hook to draw the reader in" },
+        { "title": "Chapter 1: The first core concept" },
+        { "title": "Chapter 2: The second core concept" },
+        { "title": "Chapter 3: The third core concept" },
+        { "title": "Chapter 4: A more advanced concept or case study" },
+        { "title": "Conclusion: Summarizing and providing next steps" }
+      ]
+    }
+
+    Ensure there are exactly 6 chapters, including the introduction and conclusion.
+    """

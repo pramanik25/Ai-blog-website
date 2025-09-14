@@ -1,0 +1,27 @@
+% /backend/templates/ebook_template.tex
+\documentclass{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue,
+    filecolor=magenta,      
+    urlcolor=cyan,
+    pdftitle={\VAR{title}},
+    pdfpagemode=FullScreen,
+}
+
+\begin{document}
+
+\title{\VAR{title}\\\vspace{1em}\large \VAR{subtitle}}
+\author{\VAR{author}}
+\date{\VAR{date}}
+\maketitle
+
+\tableofcontents
+\newpage
+
+\VAR{body}
+
+\end{document}

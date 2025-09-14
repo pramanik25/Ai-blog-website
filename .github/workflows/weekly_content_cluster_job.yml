@@ -1,25 +1,18 @@
-# .github/workflows/weekly_content_cluster_job.yml
-
 name: Weekly Content Cluster Generation
 
 on:
   schedule:
-    - cron: '0 2 * * *'
+    - cron: '0 2 * * 1' # Runs once a week on Monday at 2 AM UTC
   workflow_dispatch:
 
 jobs:
   build-and-run-weekly-script:
     runs-on: ubuntu-latest
-
     permissions:
       contents: write
-    
-    # --- THIS IS THE FIX ---
-    # Set a default working directory for ALL steps in this job.
     defaults:
       run:
         working-directory: ./backend
-    # --- END OF FIX ---
     
     steps:
     - name: Check out repository
@@ -29,32 +22,35 @@ jobs:
       uses: actions/setup-python@v4
       with:
         python-version: '3.11'
+        
+    # --- NEW STEP: Install Pandoc and LaTeX ---
+    - name: Install Pandoc
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y pandoc texlive-latex-base texlive-fonts-recommended
 
-    - name: Install dependencies
-      # This command is now simpler because we're already in the backend directory.
+    - name: Install Python dependencies
       run: |
         python -m pip install --upgrade pip
         pip install -r requirements.txt
-      
+    
     - name: Create Firebase Credentials File
-      # This command is also simpler and now creates the file in the correct CWD.
       run: echo '${{ secrets.FIREBASE_CREDENTIALS_JSON }}' > firebase-credentials.json
 
     - name: Run Weekly Content Worker
       env:
-        # Your secrets are correct
         DATABASE_URL: ${{ secrets.DATABASE_URL }}
-        GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
-        FIREWORKS_API_KEY: ${{ secrets.FIREWORKS_API_KEY }}
-        FIREBASE_STORAGE_BUCKET: ${{ secrets.FIREBASE_STORAGE_BUCKET }}
+        GROQ_API_KEY: ${{ secrets.GROQ_APISEC_KEY }}
         GENERATION_API_URL: ${{ secrets.GENERATION_API_URL }}
-      # The run command is now simpler
+        # --- NEW SECRET ---
+        GUMROAD_ACCESS_TOKEN: ${{ secrets.GUMROAD_ACCESS_TOKEN }}
       run: python weekly_content_worker.py
     
-    - name: Commit and push updated weekly plan
+    - name: Commit and push updated files
       run: |
         git config --global user.name 'github-actions[bot]'
         git config --global user.email 'github-actions[bot]@users.noreply.github.com'
-        git add weekly_plan.json # The plan is now in the same directory
-        git diff --staged --quiet || git commit -m "Update weekly content plan"
+        # --- UPDATE THIS LINE to include new files ---
+        git add weekly_plan.json *.md *.pdf *.log
+        git diff --staged --quiet || git commit -m "Update weekly content plan and compiled assets"
         git push
