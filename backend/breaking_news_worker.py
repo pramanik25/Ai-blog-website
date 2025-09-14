@@ -14,7 +14,7 @@ from firebase_admin import credentials, storage
 
 ## --- CONFIGURATION ---
 ARTICLES_TO_GENERATE = 5
-groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+groq_client = Groq(api_key=os.getenv("GROQ_APISEC_KEY"))
 
 # --- IMAGE GENERATION CONFIG ---
 FIREWORKS_API_KEY = os.getenv("FIREWORKS_API_KEY")
