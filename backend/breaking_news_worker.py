@@ -16,7 +16,7 @@ from firebase_admin import credentials, storage
 
 
 ## --- CONFIGURATION ---
-ARTICLES_TO_GENERATE = 2
+ARTICLES_TO_GENERATE = 5
 # --- FIX #1: Corrected the API key variable name ---
 groq_client = Groq(api_key=os.getenv("GROQ_APISEC_KEY"))
 
@@ -44,7 +44,13 @@ def fetch_headlines_from_rss():
     RSS_FEEDS = [
         'http://feeds.bbci.co.uk/news/world/rss.xml',
         'https://timesofindia.indiatimes.com/rssfeedstopstories.cms',
-        'https://news.google.com/rss?gl=IN&hl=en-IN&ceid=IN:en'
+        'https://news.google.com/rss?gl=IN&hl=en-IN&ceid=IN:en',
+        'https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml',
+        'https://www.aljazeera.com/xml/rss/all.xml',
+        'https://www.theguardian.com/world/rss',
+        'https://www.reutersagency.com/feed/?best-topics=top-news',
+        'https://www.wired.com/feed/category/science/latest/rss',
+
     ]
     all_headlines = []
     print("Fetching headlines from RSS feeds...")
