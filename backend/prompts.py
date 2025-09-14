@@ -67,13 +67,48 @@ def get_weekly_theme_prompt():
     Ensure there are exactly 7 cluster topics, one for each day of the week.
     """
 
-def get_combined_prompt(query):
+# /backend/prompts.py
+
+def get_keyword_prompt(query):
+    return f"""
+    You are an expert SEO keyword researcher.
+    Your task is to generate a list of 7-10 highly relevant secondary keywords, long-tail keywords, and LSI (Latent Semantic Indexing) keywords for a main blog post topic.
+    These keywords should be what users are actively searching for on Google.
+
+    **Main Topic:** "{query}"
+
+    You MUST respond with ONLY a valid JSON object with a single key "keywords", which is an array of strings. Do not include any other text or explanation.
+
+    **Example Output Format:**
+    {{
+      "keywords": [
+        "best seo practices 2025",
+        "how to improve website ranking",
+        "on-page seo checklist",
+        "long-tail keyword strategy",
+        "what are lsi keywords",
+        "google search ranking factors",
+        "technical seo audit"
+      ]
+    }}
+    """
+
+def get_combined_prompt(query, keywords=None):
     category_list = "['Technology', 'Health', 'Science', 'Business', 'Culture', 'World News', 'Travel', 'Food', 'Finance', 'Education', 'Lifestyle', 'Entertainment']"
-    
+    keyword_instruction = ""
+    if keywords:
+        keyword_list_str = ", ".join(f'"{k}"' for k in keywords)
+        keyword_instruction = f"""
+
+**SEO Keyword Integration:**
+You MUST naturally weave the following keywords into the article, especially in the H2 and H3 headings and key paragraphs: {keyword_list_str}.
+"""
     return f"""
 You are a world-class subject matter expert and SEO content strategist. Your task is to write a comprehensive, authoritative, and deeply engaging blog post.
 
 **Primary Topic:** "{query}"
+{keyword_instruction} 
+
 
 **Your Task:**
 Generate a single, valid JSON object containing the complete blog post.
@@ -88,7 +123,7 @@ Generate a single, valid JSON object containing the complete blog post.
 - **"content"**: The full blog post in Markdown format.
 
 **CRITICAL CONTENT REQUIREMENTS:**
-- **Length:** Minimum **2500 words**.
+- **Length:** Minimum **2500 words required**.
 - **Structure & Quality:**
     -   Start with a captivating introduction that includes the primary keyword in the first 100 words.
     -   Include a **"Key Takeaways"** section near the beginning as a bulleted list summarizing the main points.

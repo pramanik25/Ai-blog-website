@@ -8,7 +8,7 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 from dotenv import load_dotenv
 from models import db, Article
-from prompts import get_combined_prompt # We still use our great prompt!
+from prompts import get_combined_prompt, get_keyword_prompt
 import firebase_admin
 from firebase_admin import credentials, storage
 from models import db, Article, Category 
@@ -109,17 +109,33 @@ def generate_content_text_only():
     try:
         # --- Stage 1: Get AI Response (Unified Logic) ---
         print("Attempting API call for text generation...")
-        combined_prompt = get_combined_prompt(query)
+       
         try:
-            # First, try the fast, clean JSON mode
-            chat_completion = client.chat.completions.create(
-                messages=[{"role": "user", "content": combined_prompt}],
-                model="llama-3.1-8b-instant", # Use the correct, active model from Groq playground
-                temperature=0.7,
-                response_format={"type": "json_object"},
-            )
-            response_content = chat_completion.choices[0].message.content
-            print("JSON mode successful.")
+          print("Generating SEO keywords...")
+          keyword_prompt = get_keyword_prompt(query)
+          keyword_completion = client.chat.completions.create(
+            messages=[{"role": "user", "content": keyword_prompt}],
+            model="llama-3.1-8b-instant", # Fast model is fine for this
+            temperature=0.5,
+            response_format={"type": "json_object"},
+          )
+          keyword_data = json.loads(keyword_completion.choices[0].message.content)
+          seo_keywords = keyword_data.get("keywords", [])
+          print(f"Found Keywords: {seo_keywords}")
+
+       
+          print("Attempting API call for text generation with keywords...")
+          combined_prompt = get_combined_prompt(query, seo_keywords) # Pass keywords to the prompt
+        
+          chat_completion = client.chat.completions.create(
+            messages=[{"role": "user", "content": combined_prompt}],
+            model="llama-3.1-8b-instant", # Use the powerful model for the main article
+            temperature=0.7,
+            response_format={"type": "json_object"},
+          )
+          response_content = chat_completion.choices[0].message.content
+          print("JSON mode successful.")
+
         except Exception as e:
             # If it fails, fall back to text mode
             print(f"JSON mode failed: {e}. Retrying in text mode...")
@@ -157,23 +173,25 @@ def generate_content_text_only():
         
         # --- NEW: Automated Internal Linking Logic ---
         article_content = data['content']
-        # Find 2 older relevant articles to link to
-        search_terms = data['title'].split(' ')[-3:] # Use last 3 words of title for search
+        search_terms = data['title'].split(' ')[-3:]
         search_query = func.plainto_tsquery('english', ' & '.join(search_terms))
         
+        # --- THIS IS THE FIX ---
+        # Instead of .match(), we use the custom '@@' operator to prevent
+        # SQLAlchemy from double-wrapping our search query.
         relevant_articles = db.session.query(Article.title, Article.slug)\
             .filter(Article.is_published == True)\
-            .filter(func.to_tsvector('english', Article.title).match(search_query))\
+            .filter(func.to_tsvector('english', Article.title).op('@@')(search_query))\
             .limit(2).all()
+        # --- END OF FIX ---
 
         if relevant_articles:
             links_markdown = "\n\n### Read More:\n"
             for rel_title, rel_slug in relevant_articles:
                 links_markdown += f"- [{rel_title}](/blog/{rel_slug})\n"
             
-            # Append the links to the end of the new article's content
             article_content += links_markdown
-            data['content'] = article_content # Update the content
+            data['content'] = article_content
         # --- END of Internal Linking Logic ---
 
 
