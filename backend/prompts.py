@@ -4,7 +4,8 @@ from datetime import date
 from dateutil.relativedelta import relativedelta # You may need to install this: pip install python-dateutil
 
 def get_future_viral_topics_prompt():
-    """Asks the AI to predict topics that will trend in the NEXT MONTH."""
+    """Asks the AI to predict topics that will trend in the NEXT MONTH from {today}"""
+    """Asks the AI to predict future trending topics IN HINDI."""
     
     # Calculate next month's name and year
     today = date.today()
@@ -23,9 +24,9 @@ def get_future_viral_topics_prompt():
     2.  **Identify major festivals or holidays** scheduled for that month (e.g., Diwali, Christmas).
     3.  **Identify confirmed movie, TV show, or game release dates** for that month.
     4.  **Identify scheduled sporting events or tech launches.**
-    5.  **DO NOT** include any events that have already happened in past years (e.g., "Diwali 2023", "iPhone 16 launch"). All topics must be for the future.
+    5.  **DO NOT** include any events that have already happened in past month and past years (e.g., "Diwali 2023", "iPhone 16 launch"). All topics must be for the future.
 
-    You MUST respond with ONLY a valid JSON object with a single key "future_topics", which is an array of 5 specific topic strings.
+    You MUST respond with ONLY a valid JSON object with a single key "future_topics", which is an array of 10 specific topic strings.
     """
 def get_seo_prompt(query):
     return f"""
