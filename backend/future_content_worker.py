@@ -168,7 +168,7 @@ def generate_future_article_pipeline(topic):
 
         new_article = Article(
             slug=slug, title=data['title'], meta_description=data['meta_description'], content=content_with_images,
-            image_url=main_image_url, author_name=data.get('authorName'), author_bio=data.get('authorBio'),
+            image_url=main_image_url, author_name=data.get('authorName'), author_bio=data.get('authorBio'),lang='hi',
             is_published=True, is_breaking_news=False # This is evergreen, not breaking news
         )
         category_name = data.get('category')
