@@ -1,26 +1,32 @@
+# /backend/prompts.py
 import time
+from datetime import date
+from dateutil.relativedelta import relativedelta # You may need to install this: pip install python-dateutil
 
 def get_future_viral_topics_prompt():
-    """Asks the AI to predict topics that will trend in the near future."""
-    current_date = time.strftime("%B %d, %Y")
+    """Asks the AI to predict topics that will trend in the NEXT MONTH."""
+    
+    # Calculate next month's name and year
+    today = date.today()
+    next_month_date = today + relativedelta(months=1)
+    next_month_name = next_month_date.strftime("%B")
+    year = next_month_date.year
+
     return f"""
     You are an expert content strategist and cultural trend forecaster for a major news blog in India.
-    Today's date is {current_date}.
+    It is currently {today.strftime("%B %Y")}. Your task is to plan the content calendar for **{next_month_name} {year}**.
 
-    Your task is to identify 10 distinct topics that are scheduled and highly likely to become trending search queries in India and globally within the **next 7 to 21 days**.
+    Identify 10 distinct topics that are **confirmed or highly likely to be trending search queries** in India and globally during **{next_month_name} {year}**.
 
-    Focus on predictable, scheduled events. Consider the following categories:
-    - Upcoming major movie or web series releases (Bollywood, Hollywood).
-    - Upcoming major tech product launches or events.
-    - Upcoming major holidays or cultural festivals (especially relevant to India).
-    - Upcoming major sporting events or finals.
-    - Significant historical anniversaries.
+    Focus ONLY on predictable, scheduled future events. Your instructions are:
+    1.  **Analyze the calendar for {next_month_name} {year}.**
+    2.  **Identify major festivals or holidays** scheduled for that month (e.g., Diwali, Christmas).
+    3.  **Identify confirmed movie, TV show, or game release dates** for that month.
+    4.  **Identify scheduled sporting events or tech launches.**
+    5.  **DO NOT** include any events that have already happened in past years (e.g., "Diwali 2023", "iPhone 16 launch"). All topics must be for the future.
 
-
-    You MUST respond with ONLY a valid JSON object with a single key "future_topics", which is an array of 10 topic strings. Do not include any other text.
+    You MUST respond with ONLY a valid JSON object with a single key "future_topics", which is an array of 5 specific topic strings.
     """
-
-
 def get_seo_prompt(query):
     return f"""
 You are an world-class SEO expert and copywriter. Your task is to generate perfectly optimized metadata for a blog post based on a user's search query.
