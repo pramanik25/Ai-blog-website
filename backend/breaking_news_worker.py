@@ -202,7 +202,7 @@ def generate_article_with_groq_v2(headline):
         # Step 3.2: Generate Article Text
         print(" -> Step B: Generating full article with keywords...")
         prompt = get_news_generation_prompt(headline, seo_keywords)
-        chat_completion = groq_client.chat.completions.create(messages=[{"role": "user", "content": prompt}], model="llama-3.1-70b-versatile", temperature=0.6, response_format={"type": "json_object"})
+        chat_completion = groq_client.chat.completions.create(messages=[{"role": "user", "content": prompt}], model="llama-3.3-70b-versatile", temperature=0.6, response_format={"type": "json_object"})
         data = json.loads(chat_completion.choices[0].message.content)
         
         # Step 3.3: Process Images
