@@ -1,4 +1,25 @@
-# backend/prompts.py
+import time
+
+def get_future_viral_topics_prompt():
+    """Asks the AI to predict topics that will trend in the near future."""
+    current_date = time.strftime("%B %d, %Y")
+    return f"""
+    You are an expert content strategist and cultural trend forecaster for a major news blog in India.
+    Today's date is {current_date}.
+
+    Your task is to identify 10 distinct topics that are scheduled and highly likely to become trending search queries in India and globally within the **next 7 to 21 days**.
+
+    Focus on predictable, scheduled events. Consider the following categories:
+    - Upcoming major movie or web series releases (Bollywood, Hollywood).
+    - Upcoming major tech product launches or events.
+    - Upcoming major holidays or cultural festivals (especially relevant to India).
+    - Upcoming major sporting events or finals.
+    - Significant historical anniversaries.
+
+
+    You MUST respond with ONLY a valid JSON object with a single key "future_topics", which is an array of 10 topic strings. Do not include any other text.
+    """
+
 
 def get_seo_prompt(query):
     return f"""
