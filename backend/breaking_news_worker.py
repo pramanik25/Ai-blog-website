@@ -21,8 +21,6 @@ FIREWORKS_API_KEY = os.getenv("FIREWORKS_API_KEY")
 FIREWORKS_API_URL = "https://api.fireworks.ai/inference/v1/workflows/accounts/fireworks/models/flux-1-schnell-fp8/text_to_image"
 
 # --- ENSURE FIREBASE IS INITIALIZED ---
-# This block makes the worker self-sufficient. Since the worker imports 'app',
-# this check prevents re-initialization, but it's good practice for clarity.
 if not firebase_admin._apps:
     try:
         BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -36,47 +34,88 @@ if not firebase_admin._apps:
         print(f"!!! CRITICAL: Worker failed to initialize Firebase: {e} !!!")
 
 
-## --- STEP 1: NEWS DISCOVERY (AI-POWERED) ---
-def get_trending_topics():
-    """Asks the AI to identify the top trending news topics for today."""
-    print("Asking AI to identify today's top trending news topics...")
-    current_date = time.strftime("%A, %B %d, %Y")
-    location = "Patna, Bihar, India"
+## --- STEP 1: GATHER TODAY'S HEADLINES FROM RSS ---
+def fetch_headlines_from_rss():
+    """
+    Fetches headlines from RSS feeds and filters them to include only
+    articles published on the current date.
+    """
+    RSS_FEEDS = [
+        'http://feeds.bbci.co.uk/news/world/rss.xml',
+        'https://timesofindia.indiatimes.com/rssfeedstopstories.cms',
+        'https://news.google.com/rss?gl=IN&hl=en-IN&ceid=IN:en',
+        'http://rss.cnn.com/rss/edition.rss',
+        'https://www.aljazeera.com/xml/rss/all.xml'
+    ]
+    
+    todays_headlines = []
+    today = time.gmtime() # Get today's date in UTC
+    
+    print("Fetching real-time headlines from RSS feeds...")
+    for url in RSS_FEEDS:
+        try:
+            feed = feedparser.parse(url)
+            for entry in feed.entries:
+                # Check if the entry has a publication date
+                if 'published_parsed' in entry and entry.published_parsed is not None:
+                    entry_date = entry.published_parsed
+                    # Compare year, month, and day
+                    if (entry_date.tm_year == today.tm_year and
+                        entry_date.tm_mon == today.tm_mon and
+                        entry_date.tm_mday == today.tm_mday):
+                        todays_headlines.append(entry.title)
+                else:
+                    # If no date is available, we assume it's recent and include it for the AI to review
+                    todays_headlines.append(entry.title)
+        except Exception as e:
+            print(f"Could not parse RSS feed {url}. Error: {e}")
+    
+    unique_headlines = list(set(todays_headlines))
+    print(f"Found {len(unique_headlines)} unique headlines published today.")
+    return unique_headlines
 
+## --- STEP 2: AI CURATION OF HEADLINES ---
+def select_best_headlines_with_ai(headlines):
+    """Asks the AI to act as an editor and select the best headlines from a list."""
+    print("Asking AI editor to select the most important headlines...")
+    
+    headlines_str = "\n".join(f"- {h}" for h in headlines)
+    
     prompt = f"""
-    You are an expert news aggregator and editor-in-chief. Your job is to identify the most important and widely discussed news headlines in the world right now, for the date {current_date}.
+    You are a senior editor-in-chief at a major global news agency. I will provide you with a list of headlines published today.
+    Your task is to analyze this list and select the {ARTICLES_TO_GENERATE} most important, impactful, and genuinely "trending" news stories.
 
-    Create a list of 7 diverse headlines. The list should be a mix of:
-    - 3 major **global** news stories (e.g., international politics, major tech breakthroughs, science).
-    - 4 major **Indian** news stories (e.g., national politics, business in India, cultural events, sports).
+    Filter out minor updates or less significant stories. Choose a good mix of global and Indian topics.
 
-    Focus on topics that are genuinely trending and have high public interest.
+    Here is the list of today's headlines:
+    ---
+    {headlines_str}
+    ---
 
-    You MUST respond with ONLY a valid JSON object with a single key "headlines", which is an array of 7 strings. Do not add any other text.
+    You MUST respond with ONLY a valid JSON object with a single key "selected_headlines", which is an array of the {ARTICLES_TO_GENERATE} headline strings you have chosen.
     """
     try:
         chat_completion = groq_client.chat.completions.create(
             messages=[{"role": "user", "content": prompt}],
-            model="llama-3.1-8b-instant",
-            temperature=1.0,
+            model="llama-3.3-8b-instant",
+            temperature=0.2,
             response_format={"type": "json_object"},
         )
         data = json.loads(chat_completion.choices[0].message.content)
-        headlines = data.get("headlines", [])
-        print(f"AI identified trending topics: {headlines}")
-        return headlines
+        selected = data.get("selected_headlines", [])
+        print(f"AI Editor selected headlines: {selected}")
+        return selected
     except Exception as e:
-        print(f"Error getting trending topics from Groq: {e}")
+        print(f"Error during AI headline selection: {e}")
         return []
 
-## --- IMAGE GENERATION & UPLOAD FUNCTIONS ---
+## --- IMAGE & PROMPT FUNCTIONS ---
 def generate_image(prompt):
     """Calls the Fireworks.ai API to create an image."""
     print(f"  -> Sending image generation request for: '{prompt}'")
     try:
         headers = {
-            "Accept": "image/jpeg",
-            "Content-Type": "application/json",
+            "Accept": "image/jpeg", "Content-Type": "application/json",
             "Authorization": f"Bearer {FIREWORKS_API_KEY}"
         }
         payload = {"prompt": f"{prompt}, cinematic, masterpiece, 8k", "height": 512, "width": 1024}
@@ -111,8 +150,7 @@ def get_random_fallback_image():
         bucket = storage.bucket()
         blobs = bucket.list_blobs(prefix='images/')
         image_urls = [blob.public_url for blob in blobs if blob.name != 'images/']
-        if not image_urls:
-            return None
+        if not image_urls: return None
         random_url = random.choice(image_urls)
         print(f"--- Fallback successful: {random_url} ---")
         return random_url
@@ -120,7 +158,6 @@ def get_random_fallback_image():
         print(f"--- Fallback failed with an error: {e} ---")
         return None
 
-## --- STEP 2: DEDICATED NEWS GENERATION ---
 def get_news_generation_prompt(headline, keywords=None):
     """Creates a specialized prompt for generating a news article."""
     category_list = "['Technology', 'Health', 'Science', 'Business', 'Culture', 'World News', 'Travel', 'Food', 'Finance', 'Education', 'Lifestyle', 'Entertainment']"
@@ -133,131 +170,102 @@ You MUST naturally weave the following keywords into the article, especially in 
 
     return f"""
     You are a professional journalist for a major international news outlet. Your writing is objective, factual, and follows the "inverted pyramid" structure.
-
     **Headline:** "{headline}"
     {keyword_instruction}
-    **Your Task:**
-    Write a comprehensive, well-structured news article of at least 2000 words based on this headline.
-
+    **Your Task:** Write a comprehensive, well-structured news article of at least 2000 words based on this headline.
     **CRITICAL REQUIREMENTS:**
-    - **Structure:**
-        - Start with a strong lead paragraph (dateline included, e.g., "PATNA, India –") that summarizes the most crucial information.
-        - Use subsequent paragraphs for details, context, background information, and quotes.
-        - Use Markdown with H3 (`###`) subheadings.
+    - **Structure:** Start with a strong lead paragraph (dateline included, e.g., "PATNA, India –"), use H3 (`###`) subheadings, and provide detailed context.
     - **Tone:** Maintain a neutral, professional, journalistic tone.
     - **Image Placeholders:** Include exactly **two** `[IMAGE: A detailed, journalistic prompt for a relevant news photo]` placeholders.
-
     **JSON Output Structure:**
-    You MUST generate a single, valid JSON object. Do not include any text, notes, or markdown formatting like ```json before or after the object. The "content" field must be a valid JSON string, correctly escaping all special characters like newlines (\\n) and quotes (\\").
-    The JSON object must have these exact keys:
-    -   "title": The original headline.
-    -   "meta_description": A concise, SEO-friendly summary (under 155 characters).
-    -   "category": The single most relevant news category from this list: {category_list}.
-    -   "authorName": A plausible journalist's name.
-    -   "authorBio": A one-sentence bio for the journalist.
-    -   "content": The full news article in Markdown format.
+    You MUST generate a single, valid JSON object. Do not include any text or markdown formatting before or after the object. The "content" field must be a valid JSON string, correctly escaping all special characters. The JSON object must have these exact keys:
+    - "title": The original headline.
+    - "meta_description": A concise, SEO-friendly summary (under 155 characters).
+    - "category": The single most relevant news category from this list: {category_list}.
+    - "authorName": A plausible journalist's name.
+    - "authorBio": A one-sentence bio for the journalist.
+    - "content": The full news article in Markdown format.
     """
 
+## --- STEP 3: FULL ARTICLE GENERATION PIPELINE ---
 def generate_article_with_groq_v2(headline):
-    """
-    Generates and saves a news article using a dedicated, two-step Groq process.
-    """
-    print(f"Initiating 2-step generation for: '{headline}'")
+    """Generates and saves a news article using a dedicated, two-step Groq process."""
+    print(f"Initiating full pipeline for: '{headline}'")
     try:
-        # STEP 2.1: Generate Keywords
-        print(" -> Step 1: Generating SEO keywords...")
+        # Step 3.1: Generate Keywords
+        print(" -> Step A: Generating SEO keywords...")
         keyword_prompt = get_keyword_prompt(headline)
-        keyword_completion = groq_client.chat.completions.create(
-            messages=[{"role": "user", "content": keyword_prompt}],
-            model="llama-3.1-8b-instant",
-            temperature=0.5,
-            response_format={"type": "json_object"},
-        )
-        keyword_data = json.loads(keyword_completion.choices[0].message.content)
-        seo_keywords = keyword_data.get("keywords", [])
+        keyword_completion = groq_client.chat.completions.create(messages=[{"role": "user", "content": keyword_prompt}], model="llama-3.1-8b-instant", temperature=0.5, response_format={"type": "json_object"})
+        seo_keywords = json.loads(keyword_completion.choices[0].message.content).get("keywords", [])
         print(f" -> Found Keywords: {seo_keywords}")
 
-        # STEP 2.2: Generate Article
-        print(" -> Step 2: Generating full article with keywords...")
+        # Step 3.2: Generate Article Text
+        print(" -> Step B: Generating full article with keywords...")
         prompt = get_news_generation_prompt(headline, seo_keywords)
-        chat_completion = groq_client.chat.completions.create(
-            messages=[{"role": "user", "content": prompt}],
-            model="llama-3.3-70b-versatile",
-            temperature=0.6,
-            response_format={"type": "json_object"},
-        )
+        chat_completion = groq_client.chat.completions.create(messages=[{"role": "user", "content": prompt}], model="llama-3.1-70b-versatile", temperature=0.6, response_format={"type": "json_object"})
         data = json.loads(chat_completion.choices[0].message.content)
         
-        # STEP 2.3: Process Images
-        content_with_images = data['content']
-        main_image_url = None
+        # Step 3.3: Process Images
+        content_with_images, main_image_url = data['content'], None
         image_placeholders = re.findall(r'\[IMAGE: (.*?)\]', content_with_images)
-        print(f" -> Found {len(image_placeholders)} image placeholders to process.")
-
+        print(f" -> Step C: Found {len(image_placeholders)} image placeholders.")
         for i, img_prompt in enumerate(image_placeholders):
-            image_url = None
-            image_bytes = generate_image(img_prompt)
+            image_url, image_bytes = None, generate_image(img_prompt)
             if image_bytes:
                 filename = f"{slugify(data['title'])}-{time.time_ns()}-{i}.jpg"
                 image_url = upload_image_to_firebase(image_bytes, filename)
-            
             if not image_url:
-                print(f" -> Live generation failed for '{img_prompt}'. Attempting fallback.")
                 image_url = get_random_fallback_image()
-            
             if image_url:
                 if main_image_url is None: main_image_url = image_url
                 content_with_images = content_with_images.replace(f"[IMAGE: {img_prompt}]", f"![{img_prompt}]({image_url})", 1)
-                print(f" -> Replaced placeholder {i+1} with URL.")
+                print(f"   -> Replaced placeholder {i+1} with URL.")
             else:
-                print(f" -> CRITICAL: Both live generation and fallback failed for '{img_prompt}'.")
+                print(f"   -> CRITICAL: Image processing failed for '{img_prompt}'.")
             time.sleep(5)
         
-        # STEP 2.4: Save to Database
+        # Step 3.4: Save to Database
+        print(" -> Step D: Saving article to database...")
         slug = slugify(data['title'])
         if Article.query.filter_by(slug=slug, lang='en').first():
             print(f"  -> Article with slug '{slug}' already exists. Skipping.")
             return None
 
         new_article = Article(
-            slug=slug, title=data['title'], meta_description=data['meta_description'],
-            content=content_with_images, image_url=main_image_url,
-            author_name=data.get('authorName'), author_bio=data.get('authorBio'),
-            is_published=True, is_breaking_news=True
+            slug=slug, title=data['title'], meta_description=data['meta_description'], content=content_with_images, image_url=main_image_url,
+            author_name=data.get('authorName'), author_bio=data.get('authorBio'), is_published=True, is_breaking_news=True
         )
-        
         category_name = data.get('category')
         if category_name:
-            category = Category.query.filter_by(name=category_name).first()
-            if not category:
-                category = Category(name=category_name, slug=slugify(category_name))
-                db.session.add(category)
+            category = Category.query.filter_by(name=category_name).first() or Category(name=category_name, slug=slugify(category_name))
             new_article.categories.append(category)
         
         db.session.add(new_article)
         db.session.commit()
-        print(f" -> Successfully generated and saved article: '{new_article.title}'")
+        print(f" -> Successfully saved article: '{new_article.title}'")
         return new_article
 
     except Exception as e:
-        print(f" -> A critical error occurred during generation or DB save: {e}")
+        print(f" -> A critical error occurred during the pipeline: {e}")
         return None
 
 ## --- MAIN JOB ORCHESTRATION ---
 def run_breaking_news_job():
-    print("--- Starting Breaking News Job (AI Aggregator + Groq V2 + Images) ---")
+    print("--- Starting Breaking News Job (RSS -> AI Editor -> Groq Writer) ---")
     with app.app_context():
-        headlines = get_trending_topics()
-        if not headlines:
-            print("AI did not identify any trending topics. Exiting job.")
+        raw_headlines = fetch_headlines_from_rss()
+        if not raw_headlines:
+            print("No raw headlines found from RSS. Exiting job.")
+            return
+
+        selected_headlines = select_best_headlines_with_ai(raw_headlines)
+        if not selected_headlines:
+            print("AI editor did not select any headlines. Exiting job.")
             return
 
         generated_count = 0
-        random.shuffle(headlines)
-        for headline in headlines:
-            if generated_count >= ARTICLES_TO_GENERATE:
-                break
-            
+        random.shuffle(selected_headlines)
+        for headline in selected_headlines:
             if Article.query.filter(Article.title.like(f"%{headline[:50]}%")).first():
                 print(f"Skipping headline as a similar article already exists: '{headline}'")
                 continue
