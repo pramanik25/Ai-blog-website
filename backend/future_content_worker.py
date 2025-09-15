@@ -122,9 +122,17 @@ def generate_future_article_pipeline(topic):
         seo_keywords = json.loads(keyword_completion.choices[0].message.content).get("keywords", [])
         print(f" -> Found Keywords: {seo_keywords}")
 
+        future_context_query = f"""
+        Write a forward-looking article about the upcoming event or topic: "{topic}".
+
+        Your article must be written from a predictive and anticipatory perspective. Focus on what to expect, preparations for the event, its future relevance, and predictions.
+
+        CRITICAL INSTRUCTION: Avoid using information or examples from past years (e.g., 2023, 2024). All content should be framed as if it is happening in the near future (2025 and beyond).
+        """
+
         # Step B: Generate Article Text
         print(" -> Step B: Generating full article text...")
-        combined_prompt = get_combined_prompt(topic, seo_keywords)
+        combined_prompt = get_combined_prompt(future_context_query, seo_keywords)
         chat_completion = groq_client.chat.completions.create(
             messages=[{"role": "user", "content": combined_prompt}],
             model="llama-3.3-70b-versatile", temperature=0.7, response_format={"type": "json_object"}
