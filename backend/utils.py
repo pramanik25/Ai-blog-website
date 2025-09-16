@@ -10,23 +10,34 @@ ALL_TARGET_LANGUAGES = ['en', 'hi', 'fr', 'de', 'pt', 'es', 'it', 'ja', 'ko', 'r
 LIBRETRANSLATE_API_URL = "https://libretranslate.de/translate"
 
 def translate_text(text, target_language, source_language):
-    """Translates text using LibreTranslate."""
+    """Translates text using LibreTranslate with a 10-second delay and retries."""
     if not text or source_language == target_language:
         return text
     
-    time.sleep(1.5) # Polite delay
-    print(f"      - Translating from '{source_language}' to '{target_language}'...")
-    payload = {'q': text, 'source': source_language, 'target': target_language, 'format': 'text'}
-    
-    try:
-        response = requests.post(LIBRETRANSLATE_API_URL, json=payload, timeout=60)
-        if response.status_code != 200:
-            print(f"      - !!! TRANSLATION FAILED (HTTP {response.status_code}): {response.text}")
-            return text
-        return response.json().get('translatedText', text)
-    except requests.exceptions.RequestException as e:
-        print(f"      - !!! TRANSLATION FAILED (Request Exception): {e}")
-        return text
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            # --- CHANGED ---
+            # Apply a fixed 10-second wait before every attempt.
+            print("      - Waiting 10 seconds before translation...")
+            time.sleep(10)
+            # --- END OF CHANGE ---
+
+            print(f"      - Translating from '{source_language}' to '{target_language}' (Attempt {attempt + 1})...")
+            payload = {'q': text, 'source': source_language, 'target': target_language, 'format': 'text'}
+            
+            response = requests.post(LIBRETRANSLATE_API_URL, json=payload, timeout=60)
+            
+            if response.status_code == 200:
+                return response.json().get('translatedText', text)
+            else:
+                print(f"      - !!! TRANSLATION ATTEMPT FAILED (HTTP {response.status_code}): {response.text}")
+        
+        except requests.exceptions.RequestException as e:
+            print(f"      - !!! TRANSLATION ATTEMPT FAILED (Request Exception): {e}")
+
+    print(f"      - !!! FAILED all {max_retries} translation attempts. Returning original text. !!!")
+    return text
 
 def create_and_save_translations(original_article):
     """
