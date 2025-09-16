@@ -175,12 +175,12 @@ You MUST naturally weave the following keywords into the article, especially in 
     {keyword_instruction}
     **Your Task:** Write a comprehensive, well-structured news article of at least 2000 words based on this headline.
     **CRITICAL REQUIREMENTS:**
-    - **Structure:** Start with a strong lead paragraph (dateline included, e.g., "PATNA, India –"), use H3 (`###`) subheadings, and provide detailed context.
+    - **Structure:** Start with a strong lead paragraph (dateline included, e.g., "New Delhi, India –"), use H3 (`###`) subheadings, and provide detailed context.
     - **Tone:** Maintain a neutral, professional, journalistic tone.
     - **Image Placeholders:** Include exactly **two** `[IMAGE: A detailed, journalistic prompt for a relevant news photo]` placeholders.
     **JSON Output Structure:**
     You MUST generate a single, valid JSON object. Do not include any text or markdown formatting before or after the object. The "content" field must be a valid JSON string, correctly escaping all special characters. The JSON object must have these exact keys:
-    - "title": The original headline.
+    - "title": Rewrite the original headline into a highly clickable, suspenseful blog title (50-60 characters). It must remain factual but create urgency or curiosity. Example: If the original is 'Government Announces New Policy', a good title would be 'New Policy Just Dropped: How It Will Affect You'.
     - "meta_description": A concise, SEO-friendly summary (under 155 characters).
     - "category": The single most relevant news category from this list: {category_list}.
     - "authorName": A plausible journalist's name.

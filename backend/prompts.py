@@ -36,13 +36,13 @@ You are an world-class SEO expert and copywriter. Your task is to generate perfe
 
 **Your Task:**
 Generate the following metadata in a JSON format:
-1.  **title**: Under 60 characters. Must be highly clickable, contain the primary keyword, and create curiosity.
+1.  **title**: A suspenseful, highly clickable, SEO-optimized title (50-60 characters). It MUST contain the primary keyword. Use techniques like asking a question, creating a knowledge gap (e.g., 'The One Secret About X...'), or using powerful words (e.g., 'Revealed', 'Shocking'). Example: If the topic is 'The History of AI', a good title would be 'AI's Hidden History: The Secret That Changes Everything'.
 2.  **meta_description**: Under 155 characters. Summarize the article's content, include the keyword naturally, and end with a compelling call-to-action.
 3.  **slug**: A URL-friendly slug. Lowercase, words separated by hyphens, and based on the primary keyword.
 
 **Example Output Format:**
 {{
-  "title": "Example Title: A Guide to Something",
+  "title": "A suspenseful, highly clickable, SEO-optimized title (50-60 characters). It MUST contain the primary keyword. Use techniques like asking a question, creating a knowledge gap (e.g., 'The One Secret About X...'), or using powerful words (e.g., 'Revealed', 'Shocking'). Example: If the topic is 'The History of AI', a good title would be 'AI's Hidden History: The Secret That Changes Everything'"
   "meta_description": "Discover the best ways to do something with our expert guide. Learn more now!",
   "slug": "example-guide-to-something"
 }}
@@ -142,7 +142,7 @@ You are a world-class subject matter expert and SEO content strategist. Your tas
 Generate a single, valid JSON object containing the complete blog post.
 
 **JSON Object Structure:**
-- **"title"**: 50-60 characters, highly clickable, and keyword-focused.
+- **"title"**: A suspenseful, highly clickable, SEO-optimized title (50-60 characters). It MUST contain the primary keyword. Use techniques like asking a question, creating a knowledge gap (e.g., 'The One Secret About X...'), or using powerful words (e.g., 'Revealed', 'Shocking'). Example: If the topic is 'The History of AI', a good title would be 'AI's Hidden History: The Secret That Changes Everything'.
 - **"meta_description"**: 140-155 characters, compelling summary with a call-to-action.
 - **"slug"**: A URL-friendly slug.
 - **"authorName"**: A plausible expert author name.
