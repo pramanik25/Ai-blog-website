@@ -8,6 +8,7 @@ import subprocess
 from app import app, db, Article
 from prompts import get_ebook_outline_prompt
 from slugify import slugify
+from utils import create_and_save_translations
 
 # --- CONFIGURATION ---
 WEEKLY_PLAN_FILE = "weekly_plan.json"
@@ -89,8 +90,16 @@ def generate_chapter_article(context, category_name):
     try:
         response = requests.post(GENERATION_API_URL, json={'query': context_query}, timeout=300)
         response.raise_for_status()
+        
+        article_data = response.json()
         print("  - Chapter generated and saved via API successfully.")
-        return response.json()
+    
+        original_article = Article.query.get(article_data['id'])
+
+        if original_article:
+            create_and_save_translations(original_article)
+
+        return article_data 
     except requests.exceptions.RequestException as e:
         print(f"  - Error calling generation API: {e}")
         return None
@@ -133,7 +142,7 @@ def publish_to_gumroad(pdf_path, plan):
             data = {
                 'access_token': GUMROAD_ACCESS_TOKEN,
                 'name': plan['ebook_title'],
-                'price': '500',
+                'price': '49',
                 'description': f"A comprehensive guide on {plan['ebook_title']}. This ebook contains in-depth chapters covering everything you need to know to get started.",
             }
             response = requests.post("https://api.gumroad.com/v2/products", data=data, files=files)

@@ -11,6 +11,7 @@ from prompts import get_keyword_prompt
 import random
 import firebase_admin
 from firebase_admin import credentials, storage
+from utils import create_and_save_translations
 
 ## --- CONFIGURATION ---
 ARTICLES_TO_GENERATE = 5
@@ -243,6 +244,8 @@ def generate_article_with_groq_v2(headline):
         db.session.add(new_article)
         db.session.commit()
         print(f" -> Successfully saved article: '{new_article.title}'")
+        create_and_save_translations(new_article)
+        
         return new_article
 
     except Exception as e:

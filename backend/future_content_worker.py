@@ -10,6 +10,8 @@ from prompts import get_future_viral_topics_prompt, get_keyword_prompt, get_comb
 import random
 import firebase_admin
 from firebase_admin import credentials, storage
+from utils import create_and_save_translations
+
 
 # --- CONFIGURATION ---
 ARTICLES_TO_GENERATE = 10 # Should match the number in the prompt
@@ -179,6 +181,8 @@ def generate_future_article_pipeline(topic):
         db.session.add(new_article)
         db.session.commit()
         print(f" -> Successfully saved article: '{new_article.title}'")
+        print(" -> Step E: Translating article to all other languages...")
+        create_and_save_translations(new_article)
 
     except Exception as e:
         print(f" -> A critical error occurred during the pipeline for '{topic}': {e}")
