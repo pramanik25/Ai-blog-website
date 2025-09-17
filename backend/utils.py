@@ -17,32 +17,34 @@ def translate_text(text, target_language, source_language):
     max_retries = 3
     for attempt in range(max_retries):
         try:
-            # --- CHANGED ---
-            # Apply a fixed 10-second wait before every attempt.
             print("      - Waiting 10 seconds before translation...")
             time.sleep(10)
-            # --- END OF CHANGE ---
-
             print(f"      - Translating from '{source_language}' to '{target_language}' (Attempt {attempt + 1})...")
             payload = {'q': text, 'source': source_language, 'target': target_language, 'format': 'text'}
             
             response = requests.post(LIBRETRANSLATE_API_URL, json=payload, timeout=60)
             
             if response.status_code == 200:
-                return response.json().get('translatedText', text)
+                translation = response.json().get('translatedText')
+                # If translation is empty or same as original, it's a failure
+                if translation and translation != text:
+                    return translation
+                else:
+                    print(f"      - !!! TRANSLATION ATTEMPT FAILED: Service returned empty or original text.")
             else:
                 print(f"      - !!! TRANSLATION ATTEMPT FAILED (HTTP {response.status_code}): {response.text}")
         
         except requests.exceptions.RequestException as e:
             print(f"      - !!! TRANSLATION ATTEMPT FAILED (Request Exception): {e}")
 
-    print(f"      - !!! FAILED all {max_retries} translation attempts. Returning original text. !!!")
-    return text
+    print(f"      - !!! FAILED all {max_retries} translation attempts.")
+    # --- CHANGE #1: Return None on failure ---
+    return None
 
 def create_and_save_translations(original_article):
     """
-    Takes an article object, translates it into all target languages,
-    and saves them to the database.
+    Takes an article object, translates it, and saves only successful
+    translations to the database.
     """
     print(f"--- Starting translation process for article ID: {original_article.id} ---")
     source_lang = original_article.lang
@@ -51,16 +53,19 @@ def create_and_save_translations(original_article):
         if lang_code == source_lang:
             continue
 
-        # Check if a translation already exists for this language
         if Article.query.filter_by(original_article_id=original_article.id, lang=lang_code).first():
             print(f"  -> Translation for '{lang_code}' already exists. Skipping.")
             continue
 
         try:
             translated_title = translate_text(original_article.title, lang_code, source_lang)
-            translated_slug = slugify(translated_title)
             
-            # If the translated slug is empty, skip this translation
+            # --- CHANGE #2: Check for translation failure before proceeding ---
+            if not translated_title:
+                print(f"  -> CRITICAL: Title translation to '{lang_code}' failed. Skipping this language.")
+                continue
+
+            translated_slug = slugify(translated_title)
             if not translated_slug:
                 print(f"  -> Skipping translation for '{lang_code}' due to empty slug from title: '{translated_title}'")
                 continue
@@ -68,17 +73,17 @@ def create_and_save_translations(original_article):
             translated_meta = translate_text(original_article.meta_description, lang_code, source_lang)
             translated_content = translate_text(original_article.content, lang_code, source_lang)
 
+            # Another check to ensure we don't save partial translations
+            if not translated_meta or not translated_content:
+                print(f"  -> CRITICAL: Meta or Content translation to '{lang_code}' failed. Skipping.")
+                continue
+
             new_translation = Article(
-                slug=translated_slug,
-                lang=lang_code,
-                title=translated_title,
-                meta_description=translated_meta,
-                content=translated_content,
-                image_url=original_article.image_url,
-                is_published=True,
+                slug=translated_slug, lang=lang_code, title=translated_title,
+                meta_description=translated_meta, content=translated_content,
+                image_url=original_article.image_url, is_published=True,
                 is_breaking_news=original_article.is_breaking_news,
-                author_name=original_article.author_name,
-                author_bio=original_article.author_bio,
+                author_name=original_article.author_name, author_bio=original_article.author_bio,
                 original_article_id=original_article.id
             )
             
@@ -91,4 +96,4 @@ def create_and_save_translations(original_article):
 
         except Exception as e:
             print(f"  -> A critical error occurred while creating translation for '{lang_code}': {e}")
-            db.session.rollback() # Rollback the session in case of an error
+            db.session.rollback()
